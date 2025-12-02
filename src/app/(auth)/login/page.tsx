@@ -1,63 +1,162 @@
 "use client";
 
-import Link from 'next/link';
-import { Sparkles, Mail, Lock, ArrowRight } from 'lucide-react';
+import { signIn } from "next-auth/react";
+import Link from "next/link";
+import { useState } from "react";
+import { Sparkles, Eye, EyeOff } from "lucide-react";
+import { FcGoogle } from "react-icons/fc";
 
 export default function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleGoogleSignIn = async () => {
+    await signIn("google", { callbackUrl: "/dashboard" });
+  };
+
+  const handleEmailSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        isSignUp: "false",
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError(result.error);
+      } else {
+        window.location.href = "/dashboard";
+      }
+    } catch (error) {
+      setError("An unexpected error occurred");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-900/20 rounded-full blur-3xl"></div>
-      </div>
-
-      <div className="w-full max-w-md bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl relative z-10">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-900/30 text-emerald-400 mb-4">
-            <Sparkles size={24} />
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 flex items-center justify-center p-6">
+      <div className="w-full max-w-md">
+        {/* Logo */}
+        <Link href="/" className="flex items-center justify-center gap-2 mb-8">
+          <div className="bg-emerald-600/20 p-2 rounded-lg border border-emerald-500/30">
+            <Sparkles className="text-emerald-400" size={28} />
           </div>
-          <h1 className="text-2xl font-bold text-white">Welcome Back</h1>
-          <p className="text-slate-400 mt-2">Continue your journey in Skilvania</p>
-        </div>
+          <span className="font-bold text-2xl tracking-tight text-slate-200">
+            Skil<span className="text-emerald-500">vania</span>
+          </span>
+        </Link>
 
-        <form className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-3 text-slate-500" size={18} />
-              <input 
-                type="email" 
-                placeholder="druid@skilvania.com"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2.5 pl-10 pr-4 text-white focus:outline-none focus:border-emerald-500 transition-colors"
-              />
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3 text-slate-500" size={18} />
-              <input 
-                type="password" 
-                placeholder="••••••••"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2.5 pl-10 pr-4 text-white focus:outline-none focus:border-emerald-500 transition-colors"
-              />
-            </div>
-          </div>
+        {/* Login Card */}
+        <div className="bg-slate-900/50 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
+          <h1 className="text-3xl font-bold text-white mb-2 text-center">
+            Welcome Back
+          </h1>
+          <p className="text-slate-400 text-center mb-8">
+            Continue your learning journey
+          </p>
 
-          <button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2">
-            Login <ArrowRight size={18} />
+          {/* Google Sign In Button */}
+          <button
+            onClick={handleGoogleSignIn}
+            className="w-full bg-white hover:bg-gray-50 text-gray-800 font-semibold py-3 px-4 rounded-lg transition-all flex items-center justify-center gap-3 shadow-lg hover:shadow-xl"
+          >
+            <FcGoogle size={24} />
+            <span>Continue with Google</span>
           </button>
-        </form>
 
-        <div className="mt-6 text-center text-sm text-slate-400">
-          Don't have an account?{' '}
-          <Link href="/register" className="text-emerald-400 hover:text-emerald-300 font-bold">
-            Join the Guild
-          </Link>
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-600"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-slate-900/50 text-slate-400">Or continue with email</span>
+            </div>
+          </div>
+
+          {/* Email/Password Form */}
+          <form onSubmit={handleEmailSignIn} className="space-y-4">
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                <p className="text-red-400 text-sm">{error}</p>
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                placeholder="Enter your email"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 pr-12 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-600/50 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-all shadow-lg hover:shadow-xl"
+            >
+              {isLoading ? "Signing in..." : "Sign in"}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <p className="text-slate-400 text-sm">
+              Don't have an account?{" "}
+              <Link
+                href="/register"
+                className="text-emerald-400 hover:text-emerald-300 font-semibold transition-colors"
+              >
+                Join the guild
+              </Link>
+            </p>
+          </div>
         </div>
+
+        {/* Footer */}
+        <p className="text-slate-500 text-xs text-center mt-8">
+          By continuing, you agree to our Terms of Service and Privacy Policy
+        </p>
       </div>
     </div>
   );
 }
-
