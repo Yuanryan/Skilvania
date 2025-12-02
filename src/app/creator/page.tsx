@@ -1,14 +1,88 @@
-var R=require("../../../chunks/ssr/[turbopack]_runtime.js")("server/app/(auth)/login/page.js")
-R.c("server/chunks/ssr/node_modules_next_dist_ad0aa228._.js")
-R.c("server/chunks/ssr/[root-of-the-server]__d073a359._.js")
-R.c("server/chunks/ssr/node_modules_next_072325cb._.js")
-R.c("server/chunks/ssr/[root-of-the-server]__e8a2741f._.js")
-R.c("server/chunks/ssr/src_app_0db9afea._.js")
-R.c("server/chunks/ssr/node_modules_next_dist_client_components_builtin_global-error_ece394eb.js")
-R.c("server/chunks/ssr/[root-of-the-server]__b0342439._.js")
-R.c("server/chunks/ssr/node_modules_next_dist_client_components_9774470f._.js")
-R.c("server/chunks/ssr/node_modules_next_dist_client_components_builtin_forbidden_45780354.js")
-R.c("server/chunks/ssr/node_modules_next_dist_client_components_builtin_unauthorized_15817684.js")
-R.c("server/chunks/ssr/_next-internal_server_app_(auth)_login_page_actions_bf14911e.js")
-R.m("[project]/node_modules/next/dist/esm/build/templates/app-page.js?page=/(auth)/login/page { GLOBAL_ERROR_MODULE => \"[project]/node_modules/next/dist/client/components/builtin/global-error.js [app-rsc] (ecmascript, Next.js Server Component)\", METADATA_0 => \"[project]/src/app/icon.svg.mjs { IMAGE => \\\"[project]/src/app/icon.svg (static in ecmascript, tag client)\\\" } [app-rsc] (structured image object, ecmascript, Next.js Server Component)\", MODULE_1 => \"[project]/src/app/layout.tsx [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_2 => \"[project]/node_modules/next/dist/client/components/builtin/not-found.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_3 => \"[project]/node_modules/next/dist/client/components/builtin/forbidden.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_4 => \"[project]/node_modules/next/dist/client/components/builtin/unauthorized.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_5 => \"[project]/node_modules/next/dist/client/components/builtin/global-error.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_6 => \"[project]/node_modules/next/dist/client/components/builtin/not-found.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_7 => \"[project]/node_modules/next/dist/client/components/builtin/forbidden.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_8 => \"[project]/node_modules/next/dist/client/components/builtin/unauthorized.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_9 => \"[project]/src/app/(auth)/login/page.tsx [app-rsc] (ecmascript, Next.js Server Component)\" } [app-rsc] (ecmascript)")
-module.exports=R.m("[project]/node_modules/next/dist/esm/build/templates/app-page.js?page=/(auth)/login/page { GLOBAL_ERROR_MODULE => \"[project]/node_modules/next/dist/client/components/builtin/global-error.js [app-rsc] (ecmascript, Next.js Server Component)\", METADATA_0 => \"[project]/src/app/icon.svg.mjs { IMAGE => \\\"[project]/src/app/icon.svg (static in ecmascript, tag client)\\\" } [app-rsc] (structured image object, ecmascript, Next.js Server Component)\", MODULE_1 => \"[project]/src/app/layout.tsx [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_2 => \"[project]/node_modules/next/dist/client/components/builtin/not-found.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_3 => \"[project]/node_modules/next/dist/client/components/builtin/forbidden.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_4 => \"[project]/node_modules/next/dist/client/components/builtin/unauthorized.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_5 => \"[project]/node_modules/next/dist/client/components/builtin/global-error.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_6 => \"[project]/node_modules/next/dist/client/components/builtin/not-found.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_7 => \"[project]/node_modules/next/dist/client/components/builtin/forbidden.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_8 => \"[project]/node_modules/next/dist/client/components/builtin/unauthorized.js [app-rsc] (ecmascript, Next.js Server Component)\", MODULE_9 => \"[project]/src/app/(auth)/login/page.tsx [app-rsc] (ecmascript, Next.js Server Component)\" } [app-rsc] (ecmascript)").exports
+import { Navbar } from '@/components/ui/Navbar';
+import { Plus, GitBranch, Users, Edit3, MoreVertical } from 'lucide-react';
+import Link from 'next/link';
+
+const CREATED_COURSES = [
+  { id: 101, title: "Full Stack Web Developer", status: "Published", students: 1234, rating: 4.8, lastEdited: "2 days ago" },
+  { id: 105, title: "Advanced TypeScript Patterns", status: "Draft", students: 0, rating: 0, lastEdited: "Just now" },
+];
+
+export default function CreatorDashboardPage() {
+  return (
+    <div className="min-h-screen bg-deep-forest flex flex-col">
+      <Navbar />
+      
+      <main className="flex-1 max-w-5xl mx-auto w-full p-6 py-10">
+        
+        <div className="flex items-center justify-between mb-8">
+            <div>
+                <h1 className="text-3xl font-bold text-white mb-2">Creator Studio</h1>
+                <p className="text-slate-400">Manage your skill trees and review student progress.</p>
+            </div>
+            <Link 
+                href="/creator/new" 
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors flex items-center gap-2 shadow-lg shadow-blue-900/20"
+            >
+                <Plus size={20} /> Create New Course
+            </Link>
+        </div>
+
+        <div className="bg-slate-900 border border-white/5 rounded-2xl overflow-hidden">
+            <div className="grid grid-cols-12 gap-4 p-4 border-b border-white/5 bg-slate-950/50 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                <div className="col-span-5">Course Title</div>
+                <div className="col-span-2">Status</div>
+                <div className="col-span-2">Students</div>
+                <div className="col-span-2">Last Edited</div>
+                <div className="col-span-1"></div>
+            </div>
+
+            {CREATED_COURSES.map(course => (
+                <div key={course.id} className="grid grid-cols-12 gap-4 p-4 items-center border-b border-white/5 hover:bg-white/5 transition-colors group">
+                    <div className="col-span-5">
+                        <div className="font-bold text-white text-lg">{course.title}</div>
+                        <div className="text-xs text-slate-500">ID: {course.id}</div>
+                    </div>
+                    <div className="col-span-2">
+                        <span className={`px-2 py-1 rounded text-xs font-bold border ${
+                            course.status === 'Published' 
+                                ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' 
+                                : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                        }`}>
+                            {course.status}
+                        </span>
+                    </div>
+                    <div className="col-span-2 flex items-center gap-2 text-slate-300">
+                        <Users size={16} className="text-slate-500" /> {course.students}
+                    </div>
+                    <div className="col-span-2 text-slate-400 text-sm">
+                        {course.lastEdited}
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Link 
+                                href={`/creator/${course.id}/editor`}
+                                className="p-2 bg-slate-800 hover:bg-white text-slate-300 hover:text-slate-900 rounded-lg transition-colors"
+                                title="Edit Tree"
+                            >
+                                <GitBranch size={18} />
+                            </Link>
+                            <button className="p-2 hover:bg-slate-800 text-slate-500 hover:text-white rounded-lg transition-colors">
+                                <MoreVertical size={18} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ))}
+            
+            {CREATED_COURSES.length === 0 && (
+                <div className="p-12 text-center text-slate-500">
+                    You haven't planted any seeds yet.
+                </div>
+            )}
+        </div>
+
+      </main>
+    </div>
+  );
+}
+
