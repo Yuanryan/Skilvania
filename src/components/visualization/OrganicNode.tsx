@@ -17,7 +17,7 @@ interface OrganicNodeProps {
 
 const getDelay = (y: number) => {
   const startY = 750;
-  const pxPerSecond = 250;
+  const pxPerSecond = 50;
   return Math.max(0, (startY - y) / pxPerSecond); 
 };
 

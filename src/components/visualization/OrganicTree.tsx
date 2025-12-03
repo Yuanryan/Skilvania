@@ -26,6 +26,12 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
 }) => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  // Pan state
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const lastMousePos = useRef({ x: 0, y: 0 });
+  const hasPannedRef = useRef(false);
+
   const canvasRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
 
@@ -43,30 +49,61 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   };
 
   // --- DRAG HANDLERS ---
-  const handleMouseDown = (e: React.MouseEvent, node: Node) => {
+  const handleNodeMouseDown = (e: React.MouseEvent, node: Node) => {
     if (!isCreatorMode) return;
     e.stopPropagation();
     setDraggingId(node.id);
     isDraggingRef.current = false;
   };
 
-  const handleCanvasMouseMove = (e: React.MouseEvent) => {
-    if (!draggingId || !canvasRef.current || !onNodeDrag) return;
-    
-    isDraggingRef.current = true;
-    
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    // Don't pan if dragging a node (shouldn't happen due to stopPropagation in handleNodeMouseDown, but just in case)
+    if (draggingId) return;
+    // Only left click
+    if (e.button !== 0) return;
 
-    onNodeDrag(draggingId, x, y);
+    setIsPanning(true);
+    lastMousePos.current = { x: e.clientX, y: e.clientY };
+    hasPannedRef.current = false;
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    // 1. Handle Node Dragging (Creator Mode)
+    if (draggingId && canvasRef.current && onNodeDrag) {
+      isDraggingRef.current = true;
+      
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+  
+      onNodeDrag(draggingId, x, y);
+      return;
+    }
+
+    // 2. Handle Canvas Panning
+    if (isPanning) {
+      e.preventDefault(); // Prevent text selection etc.
+      const dx = e.clientX - lastMousePos.current.x;
+      const dy = e.clientY - lastMousePos.current.y;
+      
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        hasPannedRef.current = true;
+      }
+
+      setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+      lastMousePos.current = { x: e.clientX, y: e.clientY };
+    }
   };
 
   const handleCanvasMouseUp = () => {
     setDraggingId(null);
+    setIsPanning(false);
   };
 
   const handleNodeClick = (node: Node) => {
+    // Prevent click if we were panning
+    if (hasPannedRef.current) return;
+
     if (isCreatorMode) {
         if (!isDraggingRef.current) {
             // If we were already selecting a node, maybe we want to connect them?
@@ -83,12 +120,20 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
     }
   };
 
+  const handleBackgroundClick = () => {
+    if (!hasPannedRef.current) {
+        setSelectedNodeId(null);
+    }
+  };
+
   return (
     <div 
-      className="relative w-full h-full min-h-[800px] overflow-hidden"
+      className={`relative w-full h-full min-h-[800px] overflow-hidden cursor-grab ${isPanning ? 'cursor-grabbing' : ''}`}
+      onMouseDown={handleCanvasMouseDown}
       onMouseUp={handleCanvasMouseUp}
+      onMouseLeave={handleCanvasMouseUp}
       onMouseMove={handleCanvasMouseMove}
-      onClick={() => setSelectedNodeId(null)}
+      onClick={handleBackgroundClick}
     >
       {/* SVG Filter for Organic Roughness (Hidden, but defined globally for reference if needed outside this SVG context) */}
       <svg style={{ position: 'absolute', width: 0, height: 0 }} aria-hidden="true">
@@ -100,7 +145,11 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
         </defs>
       </svg>
 
-      <div className="relative w-full aspect-square max-w-3xl mx-auto mt-10" ref={canvasRef}>
+      <div 
+        className="relative w-full aspect-square max-w-3xl mx-auto mt-10 will-change-transform" 
+        ref={canvasRef}
+        style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}
+      >
         <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid meet">
           
           {/* Root Base Visualization */}
@@ -142,7 +191,7 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
             status={getNodeStatus(node.id)} 
             isSelected={selectedNodeId === node.id || (isCreatorMode && draggingId === node.id)}
             isCreatorMode={isCreatorMode}
-            onMouseDown={handleMouseDown}
+            onMouseDown={handleNodeMouseDown}
             onClick={handleNodeClick}
           />
         ))}
