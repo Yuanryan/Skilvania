@@ -1,16 +1,65 @@
 "use client";
 
-import React, { useState } from 'react';
-import { ArrowLeft, Save, Image as ImageIcon, Type, Video, Eye } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Save, Image as ImageIcon, Type, Video, Eye, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 export default function ContentEditorPage() {
   const params = useParams();
-  const [content, setContent] = useState(`
-<h2>What is the DOM?</h2>
-<p>The Document Object Model (DOM) is a programming interface for web documents...</p>
-  `.trim());
+  const courseId = params.courseId as string;
+  const nodeId = params.nodeId as string;
+  
+  const [content, setContent] = useState('');
+  const [nodeTitle, setNodeTitle] = useState('Loading...');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (courseId && nodeId) {
+      loadContent();
+    }
+  }, [courseId, nodeId]);
+
+  const loadContent = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/courses/${courseId}/nodes/${nodeId}/content`);
+      if (!response.ok) {
+        throw new Error('Failed to load content');
+      }
+      const data = await response.json();
+      setContent(data.content || '');
+      setNodeTitle(data.title || 'Node Content');
+    } catch (error) {
+      console.error('Error loading content:', error);
+      alert('Failed to load content');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/courses/${courseId}/nodes/${nodeId}/content`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save content');
+      }
+
+      alert('Content saved successfully!');
+    } catch (error) {
+      console.error('Error saving content:', error);
+      alert('Failed to save content');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col">
@@ -26,7 +75,7 @@ export default function ContentEditorPage() {
           </Link>
           <div>
             <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Editing Content</div>
-            <h1 className="text-lg font-bold text-white">Node: HTML Roots</h1>
+            <h1 className="text-lg font-bold text-white">Node: {nodeTitle}</h1>
           </div>
         </div>
 
@@ -34,8 +83,20 @@ export default function ContentEditorPage() {
             <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700 transition-colors text-sm font-bold">
                 <Eye size={16} /> Preview
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition-colors text-sm font-bold shadow-lg shadow-emerald-900/20">
-                <Save size={16} /> Save Content
+            <button 
+              onClick={handleSave}
+              disabled={saving || loading}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-bold shadow-lg shadow-emerald-900/20"
+            >
+              {saving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" /> Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={16} /> Save Content
+                </>
+              )}
             </button>
         </div>
       </header>
@@ -65,19 +126,29 @@ export default function ContentEditorPage() {
             </div>
         </aside>
 
-        {/* WYSIWYG Editor Area (Mocked) */}
+        {/* WYSIWYG Editor Area */}
         <main className="flex-1 p-8 bg-slate-950 overflow-y-auto">
-            <div className="max-w-3xl mx-auto bg-slate-900 border border-white/10 rounded-xl min-h-[600px] shadow-2xl p-8 relative">
+            {loading ? (
+              <div className="max-w-3xl mx-auto flex items-center justify-center min-h-[600px]">
+                <div className="text-center">
+                  <Loader2 className="animate-spin mx-auto text-slate-400 mb-4" size={32} />
+                  <p className="text-slate-500">Loading content...</p>
+                </div>
+              </div>
+            ) : (
+              <div className="max-w-3xl mx-auto bg-slate-900 border border-white/10 rounded-xl min-h-[600px] shadow-2xl p-8 relative">
                 <textarea 
                     className="w-full h-full bg-transparent text-slate-200 font-mono text-sm focus:outline-none resize-none"
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
                     spellCheck={false}
+                    placeholder="Enter your lesson content here... (HTML/Markdown supported)"
                 />
                 <div className="absolute bottom-4 right-4 text-xs text-slate-500">
-                    HTML Mode
+                    HTML/Markdown Mode
                 </div>
-            </div>
+              </div>
+            )}
         </main>
 
       </div>

@@ -1,28 +1,55 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { OrganicTree } from '@/components/visualization/OrganicTree';
 import { Node, Edge } from '@/types';
-import { Save, Plus, Trash2, Edit3, ArrowLeft, Settings } from 'lucide-react';
+import { Save, Plus, Trash2, Edit3, ArrowLeft, Settings, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 export default function CreatorEditorPage() {
   const params = useParams();
+  const courseId = params.courseId as string;
   
   // --- STATE ---
-  const [nodes, setNodes] = useState<Node[]>([
-    { id: '1', title: "Start Here", xp: 100, type: "theory", x: 400, y: 700, iconName: 'Globe' }
-  ]);
+  const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [courseTitle, setCourseTitle] = useState('');
+
+  // --- LOAD DATA ---
+  useEffect(() => {
+    if (courseId) {
+      loadCourseData();
+    }
+  }, [courseId]);
+
+  const loadCourseData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/courses/${courseId}`);
+      if (!response.ok) {
+        throw new Error('Failed to load course');
+      }
+      const data = await response.json();
+      setCourseTitle(data.course.title);
+      setNodes(data.nodes || []);
+      setEdges(data.edges || []);
+    } catch (error) {
+      console.error('Error loading course:', error);
+      alert('Failed to load course data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // --- ACTIONS ---
 
-  const addNode = () => {
-    const newId = (Math.max(0, ...nodes.map(n => parseInt(n.id))) + 1).toString();
+  const addNode = async () => {
     const newNode: Node = { 
-      id: newId, 
+      id: 'temp-' + Date.now(), 
       title: "New Skill", 
       xp: 100, 
       type: "code", 
@@ -30,31 +57,218 @@ export default function CreatorEditorPage() {
       y: 400, 
       iconName: 'Code' 
     };
-    setNodes([...nodes, newNode]);
+    
+    // 樂觀更新 UI
+    setNodes(prev => [...prev, newNode]);
     setSelectedNodeId(newNode.id);
+
+    // 保存到後端
+    try {
+      const response = await fetch(`/api/courses/${courseId}/nodes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newNode.title,
+          type: newNode.type,
+          x: newNode.x,
+          y: newNode.y,
+          xp: newNode.xp,
+          iconName: newNode.iconName
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to create node');
+      const data = await response.json();
+      
+      // 更新為真實 ID
+      setNodes(prev => prev.map(n => n.id === newNode.id ? data.node : n));
+      setSelectedNodeId(data.node.id);
+    } catch (error) {
+      console.error('Error creating node:', error);
+      // 回滾
+      setNodes(prev => prev.filter(n => n.id !== newNode.id));
+      setSelectedNodeId(null);
+      alert('Failed to create node');
+    }
   };
 
-  const updateNode = (id: string, updates: Partial<Node>) => {
+  const updateNode = useCallback(async (id: string, updates: Partial<Node>) => {
+    // 樂觀更新 UI
     setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
-  };
 
-  const deleteSelected = () => {
+    // 如果是位置更新，使用批量 API
+    if (updates.x !== undefined || updates.y !== undefined) {
+      // 延遲批量保存位置更新
+      return;
+    }
+
+    // 其他更新立即保存
+    try {
+      const response = await fetch(`/api/courses/${courseId}/nodes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update node');
+      }
+    } catch (error) {
+      console.error('Error updating node:', error);
+      // 重新載入以恢復正確狀態
+      loadCourseData();
+    }
+  }, [courseId]);
+
+  // 批量保存節點位置的防抖計時器
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 批量保存節點位置
+  const saveNodePositions = useCallback(async (nodesToSave: Node[]) => {
+    try {
+      const response = await fetch(`/api/courses/${courseId}/nodes/batch`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodes: nodesToSave.map(n => ({ nodeId: n.id, x: n.x, y: n.y }))
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to save positions');
+    } catch (error) {
+      console.error('Error saving positions:', error);
+    }
+  }, [courseId]);
+
+  // 節點拖拽處理（使用防抖）
+  const handleNodeDrag = useCallback((id: string, x: number, y: number) => {
+    // 立即更新 UI
+    setNodes(prev => prev.map(n => n.id === id ? { ...n, x, y } : n));
+    
+    // 清除之前的計時器
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    
+    // 設置新的防抖計時器
+    saveTimerRef.current = setTimeout(() => {
+      setNodes(currentNodes => {
+        const nodeToSave = currentNodes.find(n => n.id === id);
+        if (nodeToSave) {
+          saveNodePositions([nodeToSave]);
+        }
+        return currentNodes;
+      });
+    }, 1000); // 1秒後保存
+  }, [saveNodePositions]);
+
+  const deleteSelected = async () => {
     if (!selectedNodeId) return;
-    setEdges(prev => prev.filter(e => e.from !== selectedNodeId && e.to !== selectedNodeId));
-    setNodes(prev => prev.filter(n => n.id !== selectedNodeId));
+
+    const nodeId = selectedNodeId;
+    
+    // 樂觀更新 UI
+    setEdges(prev => prev.filter(e => e.from !== nodeId && e.to !== nodeId));
+    setNodes(prev => prev.filter(n => n.id !== nodeId));
     setSelectedNodeId(null);
+
+    // 刪除後端節點（級聯刪除連接）
+    try {
+      const response = await fetch(`/api/courses/${courseId}/nodes/${nodeId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete node');
+      }
+    } catch (error) {
+      console.error('Error deleting node:', error);
+      // 重新載入以恢復正確狀態
+      loadCourseData();
+      alert('Failed to delete node');
+    }
   };
 
-  const handleConnect = (sourceId: string, targetId: string) => {
-     // Toggle connection
-     const existingEdge = edges.find(e => e.from === sourceId && e.to === targetId);
-     if (existingEdge) {
-         setEdges(prev => prev.filter(e => e.id !== existingEdge.id));
-     } else {
-         // Prevent cycles? For now, let's just allow it.
-         setEdges(prev => [...prev, { id: `e-${Date.now()}`, from: sourceId, to: targetId }]);
-     }
+  const handleConnect = async (sourceId: string, targetId: string) => {
+    // 檢查是否已存在連接
+    const existingEdge = edges.find(e => e.from === sourceId && e.to === targetId);
+    
+    if (existingEdge) {
+      // 刪除連接
+      setEdges(prev => prev.filter(e => e.id !== existingEdge.id));
+      
+      try {
+        const edgeId = existingEdge.id.startsWith('e-') ? existingEdge.id : `e-${existingEdge.id}`;
+        const response = await fetch(`/api/courses/${courseId}/edges/${edgeId}`, {
+          method: 'DELETE'
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to delete edge');
+        }
+      } catch (error) {
+        console.error('Error deleting edge:', error);
+        loadCourseData();
+      }
+    } else {
+      // 創建連接
+      const tempEdge: Edge = { id: `temp-${Date.now()}`, from: sourceId, to: targetId };
+      setEdges(prev => [...prev, tempEdge]);
+
+      try {
+        const response = await fetch(`/api/courses/${courseId}/edges`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fromNodeId: sourceId,
+            toNodeId: targetId
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to create edge');
+        }
+
+        const data = await response.json();
+        // 更新為真實 ID
+        setEdges(prev => prev.map(e => e.id === tempEdge.id ? data.edge : e));
+      } catch (error) {
+        console.error('Error creating edge:', error);
+        // 回滾
+        setEdges(prev => prev.filter(e => e.id !== tempEdge.id));
+        alert('Failed to create connection');
+      }
+    }
   };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      // 清除防抖計時器
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      
+      // 保存所有節點位置
+      await saveNodePositions(nodes);
+      alert('Tree saved successfully!');
+    } catch (error) {
+      console.error('Error saving tree:', error);
+      alert('Failed to save tree');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 清理計時器
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
 
@@ -64,15 +278,27 @@ export default function CreatorEditorPage() {
       {/* Creator Navbar */}
       <header className="h-14 bg-slate-900 border-b border-white/10 flex items-center justify-between px-4 z-50">
         <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-slate-400 hover:text-white">
+            <Link href="/creator" className="text-slate-400 hover:text-white">
                 <ArrowLeft size={20} />
             </Link>
-            <span className="font-bold text-white">Course Editor</span>
+            <span className="font-bold text-white">{courseTitle || 'Course Editor'}</span>
             <span className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-400">Draft Mode</span>
         </div>
         <div className="flex items-center gap-2">
-            <button className="flex items-center gap-2 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold transition-colors">
-                <Save size={16} /> Save Tree
+            <button 
+              onClick={handleSave}
+              disabled={saving || loading}
+              className="flex items-center gap-2 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-bold transition-colors"
+            >
+              {saving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" /> Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={16} /> Save Tree
+                </>
+              )}
             </button>
             <button className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg">
                 <Settings size={18} />
@@ -154,15 +380,24 @@ export default function CreatorEditorPage() {
               backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)', 
               backgroundSize: '40px 40px' 
         }}>
-            <OrganicTree 
-              nodes={nodes}
-              edges={edges}
-              completedNodes={new Set()} // Creator mode ignores completed status
-              isCreatorMode={true}
-              onNodeClick={(node) => setSelectedNodeId(node.id)}
-              onNodeDrag={(id, x, y) => updateNode(id, { x, y })}
-              onConnect={handleConnect}
-            />
+            {loading ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <Loader2 className="animate-spin mx-auto text-slate-400 mb-4" size={32} />
+                  <p className="text-slate-500">Loading course...</p>
+                </div>
+              </div>
+            ) : (
+              <OrganicTree 
+                nodes={nodes}
+                edges={edges}
+                completedNodes={new Set()} // Creator mode ignores completed status
+                isCreatorMode={true}
+                onNodeClick={(node) => setSelectedNodeId(node.id)}
+                onNodeDrag={handleNodeDrag}
+                onConnect={handleConnect}
+              />
+            )}
         </div>
 
       </div>
