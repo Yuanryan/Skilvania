@@ -1,36 +1,135 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Skilvania - 興趣技能樹 (Interest Skill Tree)
+
+A modern Next.js application for learning and skill development with Supabase authentication.
+
+## Tech Stack
+
+- **Framework**: Next.js 16 with React 19
+- **Database**: Supabase (PostgreSQL)
+- **Authentication**: Supabase Auth (Email/Password + Google OAuth)
+- **Styling**: Tailwind CSS
+- **Language**: TypeScript
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 20.x or 22.x (Node.js 23+ may have compatibility issues)
+- npm or yarn
+- Supabase account and project
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd skilvania
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Set up Supabase**
+   - Create a new project at [supabase.com](https://supabase.com)
+   - Go to Settings → API to get your project URL and anon key
+
+4. **Configure environment variables**
+   - Copy the existing `.env.local` file or create a new one
+   - Add your Supabase credentials:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+   ```
+
+5. **Set up the database schema**
+   - Go to your Supabase project dashboard
+   - Navigate to SQL Editor
+   - Copy the contents of `supabase/schema.sql` and run it
+   - This will create all necessary tables: ROLES, USER, USERROLE, and the auth bridge
+
+6. **Configure Supabase Authentication**
+   - In Supabase Dashboard → Authentication → Providers
+   - Enable Google OAuth if desired
+   - Add `http://localhost:3000/auth/callback` to redirect URLs
+
+### Running the Application
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Available Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run lint` - Run ESLint
 
-## Learn More
+## Database Schema
 
-To learn more about Next.js, take a look at the following resources:
+The application uses a custom database schema designed according to the data dictionary:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **ROLES**: Role definitions (愛好者, 設計師, 開發者, etc.)
+- **USER**: User profiles with XP and level tracking
+- **USERROLE**: Many-to-many relationship between users and roles
+- **auth_user_bridge**: Links Supabase auth users to custom USER table
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Features
 
-## Deploy on Vercel
+- 🔐 **Authentication**: Email/password and Google OAuth
+- 👤 **User Profiles**: XP and level tracking with role assignments
+- 🎯 **Skill Trees**: Hierarchical learning paths (framework in place)
+- 🎨 **Modern UI**: Tailwind CSS with dark theme
+- 📱 **Responsive**: Mobile-friendly design
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Project Structure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/
+├── app/                 # Next.js app router
+│   ├── (auth)/         # Authentication routes
+│   ├── profile/        # User profiles
+│   └── api/            # API routes (if needed)
+├── components/         # Reusable components
+├── lib/               # Utilities and configurations
+│   └── supabase/      # Supabase client setup
+└── types/             # TypeScript type definitions
+
+supabase/
+└── schema.sql        # Database schema
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"npm install" hangs or fails**
+   - Delete `node_modules` and `package-lock.json`
+   - Run `npm install` again
+   - Ensure you're using Node.js 20.x or 22.x
+
+2. **Authentication not working**
+   - Verify `.env.local` has correct Supabase credentials
+   - Check Supabase dashboard for correct redirect URLs
+   - Ensure database schema is properly applied
+
+3. **Database connection issues**
+   - Confirm Supabase project is active
+   - Check that `supabase/schema.sql` was executed in SQL Editor
+   - Verify RLS policies are correctly applied
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License.
