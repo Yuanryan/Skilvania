@@ -5,10 +5,83 @@ import { mockAPI, shouldUseMock } from '@/lib/mock/creatorData';
 import { withTimeout, isNetworkError } from '@/lib/utils/timeout';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
 
-// GET /api/courses - 獲取創建者的所有課程
+// GET /api/courses - 獲取課程列表
+// 兩種模式：
+// 1. 創建者模式：無 status 參數 + 已認證 → 返回創建者的所有課程
+// 2. 瀏覽模式：status=published → 返回公開的已發布課程（不需要認證）
 export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get('status');
+    const search = searchParams.get('search');
+
     const session = await auth();
+    const supabase = createAdminClient();
+
+    // 瀏覽模式：獲取已發布的公開課程
+    if (status === 'published') {
+      let query = supabase
+        .from('course')
+        .select('CourseID, Title, Description, CreatorID, Status, TotalNodes, CreatedAt, UpdatedAt')
+        .eq('Status', 'published')
+        .order('UpdatedAt', { ascending: false });
+
+      // 如果提供了搜索參數，進行標題搜索
+      if (search && search.trim()) {
+        query = query.ilike('Title', `%${search.trim()}%`);
+      }
+
+      const { data: courses, error } = await query;
+
+      // 如果資料庫表不存在或連接超時，返回空陣列（瀏覽模式不支援 mock）
+      if (error && (shouldUseMock(error) || isNetworkError(error))) {
+        console.log('📦 Database unavailable for public browsing');
+        return NextResponse.json({ courses: [] });
+      }
+
+      if (error) {
+        console.error('Error fetching published courses:', error);
+        return NextResponse.json(
+          { error: '獲取課程失敗' },
+          { status: 500 }
+        );
+      }
+
+      // 獲取所有創建者 ID
+      const creatorIds = [...new Set((courses || []).map((c: any) => c.CreatorID))];
+      
+      // 批量查詢創建者信息
+      let creatorsMap: Record<number, string> = {};
+      if (creatorIds.length > 0) {
+        const { data: creators } = await supabase
+          .from('USER')
+          .select('UserID, Username')
+          .in('UserID', creatorIds);
+        
+        if (creators) {
+          creatorsMap = creators.reduce((acc: Record<number, string>, creator: any) => {
+            acc[creator.UserID] = creator.Username;
+            return acc;
+          }, {});
+        }
+      }
+
+      // 轉換格式並添加作者信息
+      const formattedCourses = (courses || []).map((course: any) => ({
+        id: course.CourseID.toString(),
+        title: course.Title,
+        description: course.Description || '',
+        author: creatorsMap[course.CreatorID] || 'Unknown',
+        nodes: course.TotalNodes || 0,
+        status: course.Status,
+        createdAt: course.CreatedAt,
+        updatedAt: course.UpdatedAt,
+      }));
+
+      return NextResponse.json({ courses: formattedCourses });
+    }
+
+    // 創建者模式：獲取當前登錄創建者的所有課程（需要認證）
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -19,19 +92,25 @@ export async function GET(request: NextRequest) {
     if (userId === null) {
       // 可能是 Mock 模式或使用者不存在
       // 檢查是否是 Mock 模式（表不存在）
-      const adminClient = createAdminClient();
-      const { error: testError } = await adminClient.from('auth_user_bridge').select('user_id').limit(1);
+      const { error: testError } = await supabase.from('auth_user_bridge').select('user_id').limit(1);
       if (testError && shouldUseMock(testError)) {
         console.log('📦 Using mock data (database unavailable)');
         const mockUserId = 1;
         const { courses } = mockAPI.getCourses(mockUserId);
-        return NextResponse.json({ courses, _mock: true });
+        const formattedCourses = courses.map((course: any) => ({
+          id: course.CourseID.toString(),
+          title: course.Title,
+          description: course.Description,
+          creatorId: course.CreatorID.toString(),
+          status: course.Status || 'draft',
+          totalNodes: course.TotalNodes || 0,
+          createdAt: course.CreatedAt,
+          updatedAt: course.UpdatedAt
+        }));
+        return NextResponse.json({ courses: formattedCourses, _mock: true });
       }
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
-
-    // 使用 admin client 繞過 RLS（我們已經在 API 層面檢查了權限）
-    const supabase = createAdminClient();
 
     // 獲取該使用者創建的所有課程
     const { data: courses, error } = await supabase
@@ -44,7 +123,17 @@ export async function GET(request: NextRequest) {
     if (error && (shouldUseMock(error) || isNetworkError(error))) {
       console.log('📦 Using mock data (database unavailable)');
       const { courses: mockCourses } = mockAPI.getCourses(userId);
-      return NextResponse.json({ courses: mockCourses, _mock: true });
+      const formattedCourses = mockCourses.map((course: any) => ({
+        id: course.CourseID.toString(),
+        title: course.Title,
+        description: course.Description,
+        creatorId: course.CreatorID.toString(),
+        status: course.Status || 'draft',
+        totalNodes: course.TotalNodes || 0,
+        createdAt: course.CreatedAt,
+        updatedAt: course.UpdatedAt
+      }));
+      return NextResponse.json({ courses: formattedCourses, _mock: true });
     }
 
     if (error) {
@@ -71,7 +160,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/courses - 創建新課程
+// POST /api/courses - 創建新課程（需要認證）
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
@@ -92,8 +181,8 @@ export async function POST(request: NextRequest) {
     if (userId === null) {
       // 可能是 Mock 模式或使用者不存在
       // 檢查是否是 Mock 模式（表不存在）
-      const adminClient = createAdminClient();
-      const { error: testError } = await adminClient.from('auth_user_bridge').select('user_id').limit(1);
+      const supabase = createAdminClient();
+      const { error: testError } = await supabase.from('auth_user_bridge').select('user_id').limit(1);
       if (testError && shouldUseMock(testError)) {
         console.log('📦 Using mock data (database unavailable)');
         const mockUserId = 1;

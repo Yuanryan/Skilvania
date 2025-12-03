@@ -376,7 +376,7 @@ export default function CreatorEditorPage() {
         </div>
 
         {/* The Canvas */}
-        <div className="flex-1 bg-[#0f1115] relative" style={{ 
+        <div className="flex-1 bg-[#0f1115] relative overflow-hidden" style={{ 
               backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)', 
               backgroundSize: '40px 40px' 
         }}>

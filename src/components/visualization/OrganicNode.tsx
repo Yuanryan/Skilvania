@@ -17,7 +17,7 @@ interface OrganicNodeProps {
 
 const getDelay = (y: number) => {
   const startY = 750;
-  const pxPerSecond = 50;
+  const pxPerSecond = 250;
   return Math.max(0, (startY - y) / pxPerSecond); 
 };
 
@@ -45,7 +45,7 @@ export const OrganicNode: React.FC<OrganicNodeProps> = ({
 
   // Selection glow logic
   const selectedStyle = isSelected 
-    ? (isCreatorMode ? "ring-2 ring-white scale-110 z-30" : "ring-4 ring-emerald-100/20 scale-125 z-30") 
+    ? (isCreatorMode ? "ring-2 ring-white scale-110 z-30" : "ring-4 ring-emerald-100/20 z-30") 
     : "z-20";
 
   return (

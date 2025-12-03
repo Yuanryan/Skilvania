@@ -1,42 +1,56 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navbar } from '@/components/ui/Navbar';
 import { OrganicTree } from '@/components/visualization/OrganicTree';
 import { Node, Edge } from '@/types';
-import { BookOpen, CheckCircle, Sparkles, X, ArrowRight } from 'lucide-react';
+import { BookOpen, CheckCircle, Sparkles, X, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
-// --- MOCK DATA (Same as initial mock for now) ---
-const INITIAL_NODES: Node[] = [
-  { id: '1', title: "HTML Roots",       xp: 100, type: "theory", x: 400, y: 700, iconName: 'Globe' },
-  { id: '2', title: "CSS Trunk",        xp: 150, type: "theory", x: 400, y: 550, iconName: 'Layout' },
-  { id: '3', title: "JS Logic",         xp: 300, type: "code",   x: 250, y: 450, iconName: 'Code' },
-  { id: '4', title: "Responsive UI",    xp: 200, type: "code",   x: 550, y: 450, iconName: 'BookOpen' },
-  { id: '5', title: "React Bloom",      xp: 500, type: "code",   x: 180, y: 300, iconName: 'Cpu' },
-  { id: '6', title: "Node Backend",     xp: 450, type: "code",   x: 620, y: 300, iconName: 'Server' },
-  { id: '7', title: "Database Fruit",   xp: 400, type: "theory", x: 500, y: 200, iconName: 'Database' },
-  { id: '8', title: "Capstone Crown",   xp: 1000, type: "project", x: 400, y: 100, iconName: 'Trophy' },
-];
-
-const INITIAL_EDGES: Edge[] = [
-  { from: '1', to: '2', id: 'e1' },
-  { from: '2', to: '3', id: 'e2' },
-  { from: '2', to: '4', id: 'e3' },
-  { from: '3', to: '5', id: 'e4' },
-  { from: '4', to: '6', id: 'e5' },
-  { from: '6', to: '7', id: 'e6' },
-  { from: '5', to: '8', id: 'e7' },
-  { from: '7', to: '8', id: 'e8' },
-];
-
 export default function TreePage() {
   const params = useParams();
-  const [completedNodes, setCompletedNodes] = useState<Set<string>>(new Set(['1']));
+  const courseId = params.courseId as string;
+  
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [edges, setEdges] = useState<Edge[]>([]);
+  const [completedNodes, setCompletedNodes] = useState<Set<string>>(new Set());
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock "Learning" Action
+  // 從 API 獲取數據
+  useEffect(() => {
+    const fetchTreeData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const response = await fetch(`/api/courses/${courseId}/tree`);
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || '獲取數據失敗');
+        }
+
+        const data = await response.json();
+        setNodes(data.nodes || []);
+        setEdges(data.edges || []);
+        setCompletedNodes(new Set(data.completedNodes || []));
+      } catch (err) {
+        console.error('獲取 tree 數據錯誤:', err);
+        setError(err instanceof Error ? err.message : '未知錯誤');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (courseId) {
+      fetchTreeData();
+    }
+  }, [courseId]);
+
+  // Mock "Learning" Action (暫時保留用於調試)
   const handleCompleteNode = (nodeId: string) => {
     setCompletedNodes(prev => {
         const newSet = new Set(prev);
@@ -45,15 +59,46 @@ export default function TreePage() {
     });
   };
 
+  // 加載狀態
+  if (loading) {
+    return (
+      <div className="h-screen bg-deep-forest flex flex-col overflow-hidden">
+        <Navbar />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4 text-white">
+            <Loader2 size={48} className="animate-spin text-emerald-500" />
+            <p className="text-lg">載入技能樹中...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 錯誤狀態
+  if (error) {
+    return (
+      <div className="h-screen bg-deep-forest flex flex-col overflow-hidden">
+        <Navbar />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4 text-white bg-slate-900/50 p-8 rounded-2xl border border-red-500/20">
+            <AlertCircle size={48} className="text-red-500" />
+            <p className="text-lg font-bold">載入失敗</p>
+            <p className="text-slate-400">{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-deep-forest flex flex-col overflow-hidden">
+    <div className="h-screen bg-deep-forest flex flex-col overflow-hidden">
       <Navbar />
       
-      <div className="flex-1 relative">
+      <div className="flex-1 relative overflow-hidden">
         {/* The Tree Canvas */}
         <OrganicTree 
-          nodes={INITIAL_NODES}
-          edges={INITIAL_EDGES}
+          nodes={nodes}
+          edges={edges}
           completedNodes={completedNodes}
           isCreatorMode={false}
           onNodeClick={setSelectedNode}
@@ -86,7 +131,7 @@ export default function TreePage() {
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
               <div className="prose prose-invert prose-lg">
                 <p className="text-slate-300 leading-relaxed">
-                  This node represents a key milestone in your journey. Complete the objectives to graft this knowledge onto your skill tree.
+                  {selectedNode.description || '這個節點代表你學習旅程中的一個重要里程碑。完成目標以將這些知識融入你的技能樹。'}
                 </p>
                 
                 <div className="my-8 bg-slate-950/50 rounded-2xl p-6 border border-white/5">
