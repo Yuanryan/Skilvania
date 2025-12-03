@@ -30,8 +30,8 @@ export const OrganicNode: React.FC<OrganicNodeProps> = ({
   onMouseDown 
 }) => {
   // Dynamically resolve icon, fallback to Code
-  // @ts-expect-error - Dynamic icon lookup
-  const Icon = Icons[node.iconName || 'Code'] || Icons.Code;
+  const iconName = (node.iconName || 'Code') as keyof typeof Icons;
+  const Icon = (Icons[iconName] as React.ComponentType<{ size?: number; strokeWidth?: number }>) || Icons.Code;
   const animDelay = getDelay(node.y) + 0.5;
 
   const statusStyles = {
