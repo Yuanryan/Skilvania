@@ -39,7 +39,7 @@ export default function LandingPage() {
               Start Your Journey <ArrowRight size={20} />
             </Link>
             <Link 
-              href="/creator/new" 
+              href="/creator" 
               className="px-8 py-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-lg transition-all border border-slate-700 hover:border-slate-600"
             >
               Create a Course
