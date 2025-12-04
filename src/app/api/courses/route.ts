@@ -15,8 +15,28 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const search = searchParams.get('search');
 
-    const session = await auth();
-    const supabase = createAdminClient();
+    let session;
+    try {
+      session = await auth();
+    } catch (authError) {
+      console.error('Auth error:', authError);
+      // 如果是瀏覽模式，允許繼續（不需要認證）
+      if (status !== 'published') {
+        return NextResponse.json({ error: 'Authentication error' }, { status: 500 });
+      }
+    }
+
+    let supabase;
+    try {
+      supabase = createAdminClient();
+    } catch (adminError) {
+      console.error('Admin client error:', adminError);
+      // 如果是瀏覽模式且資料庫不可用，返回空陣列
+      if (status === 'published') {
+        return NextResponse.json({ courses: [] });
+      }
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
 
     // 瀏覽模式：獲取已發布的公開課程
     if (status === 'published') {
@@ -163,7 +183,14 @@ export async function GET(request: NextRequest) {
 // POST /api/courses - 創建新課程（需要認證）
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
+    let session;
+    try {
+      session = await auth();
+    } catch (authError) {
+      console.error('Auth error:', authError);
+      return NextResponse.json({ error: 'Authentication error' }, { status: 500 });
+    }
+
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -181,7 +208,13 @@ export async function POST(request: NextRequest) {
     if (userId === null) {
       // 可能是 Mock 模式或使用者不存在
       // 檢查是否是 Mock 模式（表不存在）
-      const supabase = createAdminClient();
+      let supabase;
+      try {
+        supabase = createAdminClient();
+      } catch (adminError) {
+        console.error('Admin client error:', adminError);
+        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+      }
       const { error: testError } = await supabase.from('auth_user_bridge').select('user_id').limit(1);
       if (testError && shouldUseMock(testError)) {
         console.log('📦 Using mock data (database unavailable)');
@@ -204,7 +237,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 使用 admin client 繞過 RLS（我們已經在 API 層面檢查了權限）
-    const supabase = createAdminClient();
+    let supabase;
+    try {
+      supabase = createAdminClient();
+    } catch (adminError) {
+      console.error('Admin client error:', adminError);
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
 
     // 創建新課程
     const { data: course, error } = await supabase

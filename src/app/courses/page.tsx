@@ -101,8 +101,16 @@ export default function CoursesPage() {
 
         const response = await fetch(`/api/courses?${params.toString()}`);
         
+        // 檢查響應內容類型
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await response.text();
+          console.error('非 JSON 響應:', text.substring(0, 200));
+          throw new Error('伺服器返回了非 JSON 格式的響應。請檢查伺服器日誌。');
+        }
+        
         if (!response.ok) {
-          const errorData = await response.json();
+          const errorData = await response.json().catch(() => ({ error: '獲取課程失敗' }));
           throw new Error(errorData.error || '獲取課程失敗');
         }
 
