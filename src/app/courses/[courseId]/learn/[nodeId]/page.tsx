@@ -1,15 +1,25 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navbar } from '@/components/ui/Navbar';
 import { ArrowLeft, BookOpen, CheckCircle, PlayCircle, FileText, Award } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { logNodeView, logNodeComplete, logUserActivity } from '@/lib/utils/activityLogger';
 
 export default function LessonContentPage() {
   const params = useParams();
   const router = useRouter();
   const [isCompleted, setIsCompleted] = useState(false);
+  
+  // 自動記錄節點查看活動
+  useEffect(() => {
+    const nodeId = parseInt(params.nodeId as string);
+    const courseId = parseInt(params.courseId as string);
+    if (nodeId && courseId) {
+      logNodeView(nodeId, courseId).catch(() => {}); // 靜默失敗，不影響頁面載入
+    }
+  }, [params.nodeId, params.courseId]);
 
   // Mock Content Data
   const lesson = {
@@ -32,8 +42,36 @@ export default function LessonContentPage() {
     `
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     setIsCompleted(true);
+    
+    const nodeId = parseInt(params.nodeId as string);
+    const courseId = parseInt(params.courseId as string);
+    
+    if (nodeId && courseId) {
+      // 自動記錄節點完成活動
+      logNodeComplete(nodeId, courseId, lesson.xp).catch(() => {});
+      
+      // 檢查是否完成所有節點（課程完成）
+      try {
+        const response = await fetch(`/api/courses/${courseId}/tree`);
+        if (response.ok) {
+          const data = await response.json();
+          const totalNodes = data.nodes?.length || 0;
+          const completedNodes = data.completedNodes?.length || 0;
+          
+          // 如果完成最後一個節點，記錄課程完成
+          if (totalNodes > 0 && completedNodes + 1 >= totalNodes) {
+            logUserActivity('course_complete', {
+              courseId,
+            }).catch(() => {});
+          }
+        }
+      } catch (error) {
+        // 靜默失敗，不影響完成流程
+      }
+    }
+    
     // In a real app, this would trigger an API call
     setTimeout(() => {
       router.push(`/courses/${params.courseId}/tree`);

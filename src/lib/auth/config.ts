@@ -3,6 +3,7 @@ import Google from "next-auth/providers/google"
 import Credentials from "next-auth/providers/credentials"
 import { createClient } from "@/lib/supabase/server"
 import bcrypt from "bcryptjs"
+import { logActivity } from "@/lib/mongodb/activity"
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
@@ -89,6 +90,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             throw new Error("Failed to create user");
           }
 
+          // 自動記錄註冊活動
+          logActivity(newUser.UserID, 'register').catch((err) => {
+            console.error('❌ Failed to log register activity (Credentials):', err);
+            console.error('❌ 錯誤堆疊:', err instanceof Error ? err.stack : '無堆疊信息');
+          });
+
           return {
             id: newUser.UserID.toString(),
             email: newUser.Email,
@@ -114,6 +121,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           if (!isValid) {
             throw new Error("Invalid email or password");
           }
+
+          // 自動記錄登入活動
+          console.log('🔐 [Login] 準備記錄登入活動:', {
+            userId: user.UserID,
+            timestamp: new Date().toISOString(),
+          });
+          
+          logActivity(user.UserID, 'login').catch((err) => {
+            console.error('❌ [Login] Failed to log login activity (Credentials):', err);
+            console.error('❌ [Login] 錯誤詳情:', {
+              message: err instanceof Error ? err.message : String(err),
+              stack: err instanceof Error ? err.stack : undefined,
+              userId: user.UserID,
+            });
+          });
+          
+          console.log('🔐 [Login] logActivity 調用完成（異步執行中）');
 
           return {
             id: user.UserID.toString(),
@@ -157,6 +181,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
             // Store user ID in the user object
             user.id = newUser.UserID.toString();
+            
+            // 自動記錄註冊活動
+            logActivity(newUser.UserID, 'register').catch((err) => {
+              console.error('❌ Failed to log register activity (Google):', err);
+              console.error('❌ 錯誤堆疊:', err instanceof Error ? err.stack : '無堆疊信息');
+            });
           } else {
             // Update last activity
             await supabase
@@ -165,6 +195,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               .eq('UserID', existingUser.UserID);
 
             user.id = existingUser.UserID.toString();
+            
+            // 自動記錄登入活動
+            logActivity(existingUser.UserID, 'login').catch((err) => {
+              console.error('❌ Failed to log login activity (Google):', err);
+              console.error('❌ 錯誤堆疊:', err instanceof Error ? err.stack : '無堆疊信息');
+            });
           }
 
           return true;

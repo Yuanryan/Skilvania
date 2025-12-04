@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
 import { logActivity, getActivities, getActivityStats } from '@/lib/mongodb/activity';
-import { ActivityType } from '@/types';
+import { EventType } from '@/types';
 
 /**
  * POST /api/activities
@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
+      console.log('⚠️ /api/activities: 未找到 session');
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -20,6 +21,7 @@ export async function POST(request: NextRequest) {
 
     const userId = await getUserIdFromSession(session.user.id);
     if (!userId) {
+      console.log('⚠️ /api/activities: 無法獲取 userId');
       return NextResponse.json(
         { error: 'User not found' },
         { status: 404 }
@@ -27,25 +29,28 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { activityType, metadata, sessionId } = body;
+    const { event, ...data } = body;
 
-    if (!activityType) {
+    if (!event) {
       return NextResponse.json(
-        { error: 'activityType is required' },
+        { error: 'event is required' },
         { status: 400 }
       );
     }
 
+    console.log('📥 /api/activities 收到請求:', { userId, event });
+
     await logActivity(
       userId,
-      activityType as ActivityType,
-      metadata,
-      sessionId
+      event as EventType,
+      data
     );
+
+    console.log('✅ /api/activities 處理成功:', event);
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error in POST /api/activities:', error);
+    console.error('❌ Error in POST /api/activities:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -76,7 +81,9 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const activityType = searchParams.get('activityType');
+    const event = searchParams.get('event');
+    const courseId = searchParams.get('courseId');
+    const nodeId = searchParams.get('nodeId');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const limit = parseInt(searchParams.get('limit') || '100');
@@ -97,11 +104,13 @@ export async function GET(request: NextRequest) {
     // 返回活動列表
     const activities = await getActivities({
       userId,
-      activityType: activityType
-        ? (activityType.includes(',')
-            ? activityType.split(',') as ActivityType[]
-            : (activityType as ActivityType))
+      event: event
+        ? (event.includes(',')
+            ? event.split(',') as EventType[]
+            : (event as EventType))
         : undefined,
+      courseId: courseId ? parseInt(courseId) : undefined,
+      nodeId: nodeId ? parseInt(nodeId) : undefined,
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
       limit,

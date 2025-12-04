@@ -44,17 +44,50 @@ A modern Next.js application for learning and skill development with Supabase au
    - Copy your connection string (format: `mongodb+srv://username:password@cluster.mongodb.net/`)
 
 5. **Configure environment variables**
-   - Copy the existing `.env.local` file or create a new one
-   - Add your Supabase credentials:
+   - Copy `.env.example` to `.env.local`:
+   ```bash
+   cp .env.example .env.local
+   ```
+   - Or create a new `.env.local` file and add the following:
+   
+   **Required variables:**
    ```env
+   # Supabase Configuration
    NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+   
+   # NextAuth Configuration (Required)
+   # Generate a secret using: npm run generate-secret
+   # Or use: openssl rand -base64 32
+   NEXTAUTH_SECRET=your-generated-secret-here
+   NEXTAUTH_URL=http://localhost:3000
    ```
-   - Add your MongoDB credentials:
+   
+   **Optional variables:**
    ```env
+   # Google OAuth (Optional - only if you want Google sign-in)
+   GOOGLE_CLIENT_ID=your-google-client-id-here
+   GOOGLE_CLIENT_SECRET=your-google-client-secret-here
+   
+   # MongoDB Configuration (Optional - for user activity logging)
    MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/
    MONGODB_DB_NAME=skilvania
+   ```
+   
+   **重要**: 必須設置 `NEXTAUTH_SECRET`，否則認證功能無法正常工作。可以使用以下命令生成：
+   ```bash
+   # 使用 npm 腳本（推薦，跨平台）
+   npm run generate-secret
+   
+   # 或使用 Node.js
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   
+   # Windows (PowerShell)
+   [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+   
+   # macOS/Linux
+   openssl rand -base64 32
    ```
 
 6. **Set up the database schema**
@@ -143,10 +176,30 @@ supabase/
    - Run `npm install` again
    - Ensure you're using Node.js 20.x or 22.x
 
-2. **Authentication not working**
-   - Verify `.env.local` has correct Supabase credentials
-   - Check Supabase dashboard for correct redirect URLs
-   - Ensure database schema is properly applied
+2. **Authentication not working / MissingSecret error**
+   - **必須設置 `NEXTAUTH_SECRET` 環境變數**
+   - 生成 secret 的方法：
+     ```bash
+     # 使用 npm 腳本（推薦）
+     npm run generate-secret
+     
+     # 或使用 Node.js
+     node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+     
+     # Windows PowerShell
+     [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+     
+     # macOS/Linux
+     openssl rand -base64 32
+     ```
+   - 將生成的 secret 添加到 `.env.local`:
+     ```env
+     NEXTAUTH_SECRET=your-generated-secret-here
+     NEXTAUTH_URL=http://localhost:3000
+     ```
+   - 驗證 `.env.local` 有正確的 Supabase 憑證
+   - 檢查 Supabase dashboard 中的重定向 URL 是否正確
+   - 確保數據庫 schema 已正確應用
 
 3. **Database connection issues**
    - Confirm Supabase project is active

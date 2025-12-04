@@ -124,6 +124,7 @@ export async function GET(
       nodes,
       edges,
       completedNodes: Array.from(completedNodeIds),
+      courseTitle: course.Title, // 添加課程標題
     });
   } catch (error) {
     console.error('API 錯誤:', error);

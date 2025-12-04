@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth/config';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { mockAPI, shouldUseMock } from '@/lib/mock/creatorData';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
+import { logActivity } from '@/lib/mongodb/activity';
 
 // POST /api/courses/[courseId]/nodes - 創建新節點
 export async function POST(
@@ -156,6 +157,14 @@ export async function POST(
       console.error('Error creating node:', error);
       return NextResponse.json({ error: 'Failed to create node' }, { status: 500 });
     }
+
+    // 自動記錄節點創建活動
+    logActivity(userId, 'node_create', {
+      nodeId: node.NodeID,
+      courseId: parseInt(courseId),
+    }).catch((err) => {
+      console.error('❌ Failed to log node_create activity:', err);
+    });
 
     return NextResponse.json({
       node: {

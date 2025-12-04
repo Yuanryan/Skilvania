@@ -3,45 +3,44 @@
  * 用於在客戶端組件中記錄用戶活動
  */
 
-import { ActivityType } from '@/types';
+import { EventType } from '@/types';
 
 /**
- * 記錄用戶活動（客戶端使用）
+ * 記錄用戶活動（客戶端使用，最小必要格式）
  */
 export async function logUserActivity(
-  activityType: ActivityType,
-  metadata?: Record<string, any>
+  event: EventType,
+  data: {
+    courseId?: number;
+    nodeId?: number;
+    xpGained?: number;
+  } = {}
 ): Promise<void> {
   try {
-    // 生成或獲取會話 ID
-    let sessionId = sessionStorage.getItem('sessionId');
-    if (!sessionId) {
-      sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      sessionStorage.setItem('sessionId', sessionId);
-    }
-
-    // 添加額外的客戶端元數據
-    const enhancedMetadata = {
-      ...metadata,
-      page: window.location.pathname,
-      referrer: document.referrer,
-      userAgent: navigator.userAgent,
-      timestamp: new Date().toISOString(),
-    };
-
-    await fetch('/api/activities', {
+    const response = await fetch('/api/activities', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        activityType,
-        metadata: enhancedMetadata,
-        sessionId,
+        event,
+        ...data,
       }),
     });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('❌ 活動記錄 API 失敗:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorData.error,
+        event,
+      });
+    } else {
+      console.log('✅ 活動記錄成功 (客戶端):', event);
+    }
   } catch (error) {
-    console.error('Error logging activity:', error);
+    console.error('❌ 記錄活動時發生錯誤:', error);
     // 不拋出錯誤，避免影響主要功能
   }
 }
@@ -49,11 +48,8 @@ export async function logUserActivity(
 /**
  * 記錄頁面瀏覽
  */
-export function logPageView(page: string, metadata?: Record<string, any>) {
-  return logUserActivity('page_view', {
-    page,
-    ...metadata,
-  });
+export function logPageView(page: string) {
+  return logUserActivity('page_view');
 }
 
 /**
@@ -61,13 +57,11 @@ export function logPageView(page: string, metadata?: Record<string, any>) {
  */
 export function logNodeView(
   nodeId: number,
-  courseId: number,
-  metadata?: Record<string, any>
+  courseId: number
 ) {
   return logUserActivity('node_view', {
     nodeId,
     courseId,
-    ...metadata,
   });
 }
 
@@ -77,14 +71,12 @@ export function logNodeView(
 export function logNodeComplete(
   nodeId: number,
   courseId: number,
-  xpGained: number,
-  metadata?: Record<string, any>
+  xpGained: number
 ) {
   return logUserActivity('node_complete', {
     nodeId,
     courseId,
     xpGained,
-    ...metadata,
   });
 }
 
@@ -92,10 +84,7 @@ export function logNodeComplete(
  * 記錄搜尋活動
  */
 export function logSearch(query: string, resultsCount?: number) {
-  return logUserActivity('search', {
-    searchQuery: query,
-    resultsCount,
-  });
+  return logUserActivity('search');
 }
 
 /**
@@ -107,4 +96,3 @@ export function usePageView(page: string) {
     logPageView(page);
   }
 }
-

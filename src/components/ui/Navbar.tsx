@@ -6,6 +6,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { logUserActivity } from "@/lib/utils/activityLogger";
 
 export function Navbar() {
   const { data: session, status } = useSession();
@@ -37,6 +38,16 @@ export function Navbar() {
   }, [session]);
 
   const handleLogout = async () => {
+    // 在登出前記錄登出活動（在 session 清除之前）
+    try {
+      console.log('📝 開始記錄登出活動...');
+      await logUserActivity('logout', {});
+      console.log('✅ 登出活動記錄完成');
+    } catch (error) {
+      console.error('❌ 記錄登出活動失敗:', error);
+      // 繼續登出流程，不因記錄失敗而中斷
+    }
+    
     await signOut({ redirect: false });
     router.push('/login');
     router.refresh();

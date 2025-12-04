@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { mockAPI, shouldUseMock } from '@/lib/mock/creatorData';
 import { withTimeout, isNetworkError } from '@/lib/utils/timeout';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
+import { logActivity } from '@/lib/mongodb/activity';
 
 // GET /api/courses - 獲取課程列表
 // 兩種模式：
@@ -241,6 +242,13 @@ export async function POST(request: NextRequest) {
       console.error('Error creating course:', error);
       return NextResponse.json({ error: 'Failed to create course' }, { status: 500 });
     }
+
+    // 自動記錄課程創建活動
+    logActivity(userId, 'course_create', {
+      courseId: course.CourseID,
+    }).catch((err) => {
+      console.error('❌ Failed to log course_create activity:', err);
+    });
 
     return NextResponse.json({ 
       courseId: course.CourseID,

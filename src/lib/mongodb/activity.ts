@@ -1,33 +1,79 @@
 import { getDatabase } from './client';
-import { UserActivity, ActivityType, ActivityQuery } from '@/types';
+import { UserActivity, EventType, ActivityQuery } from '@/types';
 
 const COLLECTION_NAME = 'user_activities';
 
 /**
- * 記錄用戶活動
+ * 記錄用戶活動（最小必要格式）
  */
 export async function logActivity(
   userId: number,
-  activityType: ActivityType,
-  metadata?: Record<string, any>,
-  sessionId?: string
+  event: EventType,
+  data: {
+    courseId?: number;
+    nodeId?: number;
+    xpGained?: number;
+  } = {}
 ): Promise<void> {
   try {
+    // 如果 MongoDB 未配置，記錄警告並返回
+    if (!process.env.MONGODB_URI) {
+      const env = process.env.NODE_ENV || 'unknown';
+      console.warn(`⚠️ [logActivity] MongoDB 未配置 (環境: ${env})，跳過活動記錄`);
+      if (env === 'production') {
+        console.warn('⚠️ [logActivity] 請在 Vercel Dashboard → Settings → Environment Variables 中配置 MONGODB_URI');
+      } else {
+        console.warn('⚠️ [logActivity] 請檢查 .env.local 中是否有 MONGODB_URI');
+      }
+      return;
+    }
+    
+    console.log('📝 [logActivity] 開始記錄活動:', { 
+      userId, 
+      event,
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+    
     const db = await getDatabase();
     const collection = db.collection<UserActivity>(COLLECTION_NAME);
 
+    // 構建最小必要活動記錄
     const activity: Omit<UserActivity, '_id'> = {
       userId,
-      activityType,
+      event,
       timestamp: new Date(),
-      metadata: metadata || {},
-      sessionId,
-      createdAt: new Date(),
+      ...(data.courseId && { courseId: data.courseId }),
+      ...(data.nodeId && { nodeId: data.nodeId }),
+      ...(data.xpGained !== undefined && { xpGained: data.xpGained }),
     };
 
-    await collection.insertOne(activity as UserActivity);
+    const result = await collection.insertOne(activity as UserActivity);
+    
+    // 驗證插入是否成功
+    if (!result.insertedId) {
+      throw new Error('插入失敗：未返回 insertedId');
+    }
+    
+    // 再次驗證：查詢剛插入的記錄
+    const insertedRecord = await collection.findOne({ _id: result.insertedId });
+    if (!insertedRecord) {
+      throw new Error('插入失敗：無法查詢到剛插入的記錄');
+    }
+    
+    console.log('✅ 活動記錄成功並驗證:', { 
+      insertedId: result.insertedId, 
+      event,
+      verified: true 
+    });
   } catch (error) {
-    console.error('Error logging activity:', error);
+    console.error('❌ 記錄活動失敗:', error);
+    console.error('❌ 錯誤詳情:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      userId,
+      event,
+    });
     // 不拋出錯誤，避免影響主要功能
   }
 }
@@ -38,22 +84,28 @@ export async function logActivity(
 export async function logActivities(
   activities: Array<{
     userId: number;
-    activityType: ActivityType;
-    metadata?: Record<string, any>;
-    sessionId?: string;
+    event: EventType;
+    courseId?: number;
+    nodeId?: number;
+    xpGained?: number;
   }>
 ): Promise<void> {
   try {
+    // 如果 MongoDB 未配置，靜默返回
+    if (!process.env.MONGODB_URI) {
+      return;
+    }
+    
     const db = await getDatabase();
     const collection = db.collection<UserActivity>(COLLECTION_NAME);
 
     const docs = activities.map((activity) => ({
       userId: activity.userId,
-      activityType: activity.activityType,
+      event: activity.event,
       timestamp: new Date(),
-      metadata: activity.metadata || {},
-      sessionId: activity.sessionId,
-      createdAt: new Date(),
+      ...(activity.courseId && { courseId: activity.courseId }),
+      ...(activity.nodeId && { nodeId: activity.nodeId }),
+      ...(activity.xpGained !== undefined && { xpGained: activity.xpGained }),
     }));
 
     if (docs.length > 0) {
@@ -72,6 +124,11 @@ export async function getActivities(
   query: ActivityQuery
 ): Promise<UserActivity[]> {
   try {
+    // 如果 MongoDB 未配置，返回空數組
+    if (!process.env.MONGODB_URI) {
+      return [];
+    }
+    
     const db = await getDatabase();
     const collection = db.collection<UserActivity>(COLLECTION_NAME);
 
@@ -81,12 +138,20 @@ export async function getActivities(
       filter.userId = query.userId;
     }
 
-    if (query.activityType) {
-      if (Array.isArray(query.activityType)) {
-        filter.activityType = { $in: query.activityType };
+    if (query.event) {
+      if (Array.isArray(query.event)) {
+        filter.event = { $in: query.event };
       } else {
-        filter.activityType = query.activityType;
+        filter.event = query.event;
       }
+    }
+
+    if (query.courseId) {
+      filter.courseId = query.courseId;
+    }
+
+    if (query.nodeId) {
+      filter.nodeId = query.nodeId;
     }
 
     if (query.startDate || query.endDate) {
@@ -122,10 +187,18 @@ export async function getActivityStats(
   endDate?: Date
 ): Promise<{
   totalActivities: number;
-  activitiesByType: Record<ActivityType, number>;
+  activitiesByEvent: Record<EventType, number>;
   lastActivityDate?: Date;
 }> {
   try {
+    // 如果 MongoDB 未配置，返回空統計
+    if (!process.env.MONGODB_URI) {
+      return {
+        totalActivities: 0,
+        activitiesByEvent: {} as Record<EventType, number>,
+      };
+    }
+    
     const db = await getDatabase();
     const collection = db.collection<UserActivity>(COLLECTION_NAME);
 
@@ -136,21 +209,21 @@ export async function getActivityStats(
       if (endDate) filter.timestamp.$lte = endDate;
     }
 
+    // 按事件類型統計
     const pipeline = [
       { $match: filter },
       {
         $group: {
-          _id: '$activityType',
+          _id: '$event',
           count: { $sum: 1 },
         },
       },
     ];
 
     const results = await collection.aggregate(pipeline).toArray();
-    const activitiesByType = {} as Record<ActivityType, number>;
-
+    const activitiesByEvent = {} as Record<EventType, number>;
     results.forEach((result) => {
-      activitiesByType[result._id as ActivityType] = result.count;
+      activitiesByEvent[result._id as EventType] = result.count;
     });
 
     const totalActivities = await collection.countDocuments(filter);
@@ -159,7 +232,7 @@ export async function getActivityStats(
 
     return {
       totalActivities,
-      activitiesByType,
+      activitiesByEvent,
       lastActivityDate: lastActivity?.timestamp,
     };
   } catch (error) {
@@ -191,4 +264,3 @@ export async function deleteOldActivities(
     throw error;
   }
 }
-

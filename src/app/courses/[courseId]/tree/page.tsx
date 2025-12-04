@@ -7,6 +7,7 @@ import { Node, Edge } from '@/types';
 import { BookOpen, CheckCircle, Sparkles, X, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { logUserActivity } from '@/lib/utils/activityLogger';
 
 export default function TreePage() {
   const params = useParams();
@@ -37,6 +38,14 @@ export default function TreePage() {
         setNodes(data.nodes || []);
         setEdges(data.edges || []);
         setCompletedNodes(new Set(data.completedNodes || []));
+        
+        // 自動記錄課程開始活動
+        const courseIdNum = parseInt(courseId);
+        if (courseIdNum) {
+          logUserActivity('course_start', {
+            courseId: courseIdNum,
+          }).catch(() => {}); // 靜默失敗，不影響頁面載入
+        }
       } catch (err) {
         console.error('獲取 tree 數據錯誤:', err);
         setError(err instanceof Error ? err.message : '未知錯誤');
