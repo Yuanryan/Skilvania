@@ -243,14 +243,28 @@ export const mockAPI = {
   },
 
   // 批量更新節點位置
-  batchUpdateNodes(courseId: number, nodeUpdates: Array<{ nodeId: string; x: number; y: number }>) {
+  batchUpdateNodes(courseId: number, nodeUpdates: Array<{ 
+    nodeId: string; 
+    x?: number; 
+    y?: number;
+    title?: string;
+    type?: string;
+    xp?: number;
+    iconName?: string;
+    description?: string;
+  }>) {
     const nodes = mockNodes.get(courseId) || [];
     
     nodeUpdates.forEach(update => {
       const node = nodes.find(n => n.NodeID.toString() === update.nodeId);
       if (node) {
-        node.X = update.x;
-        node.Y = update.y;
+        if (update.x !== undefined) node.X = update.x;
+        if (update.y !== undefined) node.Y = update.y;
+        if (update.title !== undefined) node.Title = update.title;
+        if (update.type !== undefined) node.Type = update.type as any;
+        if (update.xp !== undefined) node.XP = update.xp;
+        if (update.iconName !== undefined) node.IconName = update.iconName;
+        if (update.description !== undefined) node.Description = update.description;
         node.UpdatedAt = new Date().toISOString();
       }
     });

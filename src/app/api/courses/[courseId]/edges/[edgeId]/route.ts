@@ -47,7 +47,36 @@ export async function DELETE(
     }
 
     // 刪除連接（edgeId 可能是 "e-123" 格式，需要提取數字）
+    // 處理臨時 ID（temp-xxx）的情況
+    if (edgeId.startsWith('temp-')) {
+      console.error('Cannot delete temporary edge:', edgeId);
+      return NextResponse.json({ error: 'Cannot delete temporary edge' }, { status: 400 });
+    }
+    
     const numericEdgeId = edgeId.startsWith('e-') ? parseInt(edgeId.substring(2)) : parseInt(edgeId);
+    
+    if (isNaN(numericEdgeId)) {
+      console.error('Invalid edgeId format:', edgeId);
+      return NextResponse.json({ error: 'Invalid edge ID format' }, { status: 400 });
+    }
+    
+    // 先檢查 edge 是否存在（可選，用於更好的錯誤訊息）
+    const { data: existingEdge, error: checkError } = await supabase
+      .from('edge')
+      .select('EdgeID, CourseID')
+      .eq('EdgeID', numericEdgeId)
+      .eq('CourseID', parseInt(courseId))
+      .maybeSingle();
+    
+    // 如果檢查時發生錯誤且不是 Mock 模式，記錄錯誤但繼續嘗試刪除
+    if (checkError && !shouldUseMock(checkError)) {
+      console.warn('Warning checking edge (will still attempt delete):', checkError);
+    }
+    
+    // 如果 edge 不存在且不是 Mock 模式，返回 404
+    if (!existingEdge && !checkError) {
+      return NextResponse.json({ error: 'Edge not found' }, { status: 404 });
+    }
     
     const { error } = await supabase
       .from('edge')

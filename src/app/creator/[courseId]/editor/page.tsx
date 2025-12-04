@@ -113,6 +113,12 @@ export default function CreatorEditorPage() {
       if (!response.ok) {
         throw new Error('Failed to update node');
       }
+
+      // 使用 API 返回的數據更新本地狀態（確保與資料庫同步）
+      const data = await response.json();
+      if (data.node) {
+        setNodes(prev => prev.map(n => n.id === id ? { ...n, ...data.node } : n));
+      }
     } catch (error) {
       console.error('Error updating node:', error);
       // 重新載入以恢復正確狀態
@@ -126,17 +132,28 @@ export default function CreatorEditorPage() {
   // 批量保存節點位置
   const saveNodePositions = useCallback(async (nodesToSave: Node[]) => {
     try {
+      // 過濾掉臨時節點（temp-xxx）
+      const validNodes = nodesToSave.filter(n => !n.id.startsWith('temp-'));
+      
+      if (validNodes.length === 0) {
+        return; // 沒有有效節點，直接返回
+      }
+
       const response = await fetch(`/api/courses/${courseId}/nodes/batch`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nodes: nodesToSave.map(n => ({ nodeId: n.id, x: n.x, y: n.y }))
+          nodes: validNodes.map(n => ({ nodeId: n.id, x: n.x, y: n.y }))
         })
       });
 
-      if (!response.ok) throw new Error('Failed to save positions');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to save positions');
+      }
     } catch (error) {
       console.error('Error saving positions:', error);
+      // 不顯示 alert，因為這是自動保存（防抖），避免打擾用戶
     }
   }, [courseId]);
 
@@ -194,21 +211,31 @@ export default function CreatorEditorPage() {
     const existingEdge = edges.find(e => e.from === sourceId && e.to === targetId);
     
     if (existingEdge) {
+      // 如果是臨時 edge（temp-xxx），直接從 UI 移除，不需要調用 API
+      if (existingEdge.id.startsWith('temp-')) {
+        setEdges(prev => prev.filter(e => e.id !== existingEdge.id));
+        return;
+      }
+      
       // 刪除連接
       setEdges(prev => prev.filter(e => e.id !== existingEdge.id));
       
       try {
+        // edgeId 應該已經是 "e-123" 格式，如果不是則添加前綴
         const edgeId = existingEdge.id.startsWith('e-') ? existingEdge.id : `e-${existingEdge.id}`;
         const response = await fetch(`/api/courses/${courseId}/edges/${edgeId}`, {
           method: 'DELETE'
         });
 
         if (!response.ok) {
-          throw new Error('Failed to delete edge');
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to delete edge');
         }
       } catch (error) {
         console.error('Error deleting edge:', error);
+        // 如果刪除失敗，重新載入資料以恢復正確狀態
         loadCourseData();
+        alert('Failed to delete connection. Please try again.');
       }
     } else {
       // 創建連接
@@ -250,12 +277,41 @@ export default function CreatorEditorPage() {
         saveTimerRef.current = null;
       }
       
-      // 保存所有節點位置
-      await saveNodePositions(nodes);
+      // 過濾掉臨時節點（temp-xxx），只保存已創建的節點
+      const validNodes = nodes.filter(n => !n.id.startsWith('temp-'));
+      
+      if (validNodes.length === 0) {
+        alert('No nodes to save. Please create at least one node.');
+        return;
+      }
+
+      // 保存所有節點的完整信息（位置、標題、類型、XP、圖標等）
+      const response = await fetch(`/api/courses/${courseId}/nodes/batch`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodes: validNodes.map(n => ({
+            nodeId: n.id,
+            x: n.x,
+            y: n.y,
+            title: n.title,
+            type: n.type,
+            xp: n.xp,
+            iconName: n.iconName,
+            description: n.description
+          }))
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to save tree');
+      }
+
       alert('Tree saved successfully!');
     } catch (error) {
       console.error('Error saving tree:', error);
-      alert('Failed to save tree');
+      alert(error instanceof Error ? error.message : 'Failed to save tree');
     } finally {
       setSaving(false);
     }
@@ -344,7 +400,17 @@ export default function CreatorEditorPage() {
                       <label className="text-[10px] uppercase text-slate-500 font-bold block mb-1">Type</label>
                       <select 
                         value={selectedNode.type}
-                        onChange={(e) => updateNode(selectedNode.id, { type: e.target.value as any })}
+                        onChange={(e) => {
+                          const newType = e.target.value as any;
+                          // 根據 Type 自動設置對應的 Icon
+                          const iconMap: Record<string, string> = {
+                            'theory': 'Book',
+                            'code': 'Code',
+                            'project': 'Rocket'
+                          };
+                          const newIconName = iconMap[newType] || 'Code';
+                          updateNode(selectedNode.id, { type: newType, iconName: newIconName });
+                        }}
                         className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
                       >
                         <option value="theory">Theory (Reading)</option>
