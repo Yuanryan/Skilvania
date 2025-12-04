@@ -5,7 +5,7 @@ A modern Next.js application for learning and skill development with Supabase au
 ## Tech Stack
 
 - **Framework**: Next.js 16 with React 19
-- **Database**: Supabase (PostgreSQL)
+- **Database**: Supabase (PostgreSQL) + MongoDB (User Activity Logging)
 - **Authentication**: Supabase Auth (Email/Password + Google OAuth)
 - **Styling**: Tailwind CSS
 - **Language**: TypeScript
@@ -17,6 +17,7 @@ A modern Next.js application for learning and skill development with Supabase au
 - Node.js 20.x or 22.x (Node.js 23+ may have compatibility issues)
 - npm or yarn
 - Supabase account and project
+- MongoDB account (MongoDB Atlas recommended for cloud hosting)
 
 ### Installation
 
@@ -35,21 +36,34 @@ A modern Next.js application for learning and skill development with Supabase au
    - Create a new project at [supabase.com](https://supabase.com)
    - Go to Settings → API to get your project URL and anon key
 
-4. **Configure environment variables**
+4. **Set up MongoDB (for user activity logging)**
+   - Create a free account at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+   - Create a new cluster (free tier is sufficient)
+   - Create a database user and get your connection string
+   - Add your IP address to the network access list
+   - Copy your connection string (format: `mongodb+srv://username:password@cluster.mongodb.net/`)
+
+5. **Configure environment variables**
    - Copy the existing `.env.local` file or create a new one
    - Add your Supabase credentials:
    ```env
    NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+   ```
+   - Add your MongoDB credentials:
+   ```env
+   MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/
+   MONGODB_DB_NAME=skilvania
    ```
 
-5. **Set up the database schema**
+6. **Set up the database schema**
    - Go to your Supabase project dashboard
    - Navigate to SQL Editor
    - Copy the contents of `supabase/schema.sql` and run it
    - This will create all necessary tables: ROLES, USER, USERROLE, and the auth bridge
 
-6. **Configure Supabase Authentication**
+7. **Configure Supabase Authentication**
    - In Supabase Dashboard → Authentication → Providers
    - Enable Google OAuth if desired
    - Add `http://localhost:3000/auth/callback` to redirect URLs
@@ -71,12 +85,27 @@ Open [http://localhost:3000](http://localhost:3000) with your browser.
 
 ## Database Schema
 
+### Supabase (PostgreSQL)
+
 The application uses a custom database schema designed according to the data dictionary:
 
 - **ROLES**: Role definitions (愛好者, 設計師, 開發者, etc.)
 - **USER**: User profiles with XP and level tracking
 - **USERROLE**: Many-to-many relationship between users and roles
 - **auth_user_bridge**: Links Supabase auth users to custom USER table
+- **COURSE**: Course definitions
+- **NODE**: Learning nodes in skill trees
+- **EDGE**: Connections between nodes
+- **USERPROGRESS**: User learning progress tracking
+
+### MongoDB (User Activity Logging)
+
+MongoDB is used to store user activity logs in a flexible NoSQL format:
+
+- **user_activities**: Collection storing all user activities
+  - Activity types: page_view, node_view, node_complete, course_start, search, login, etc.
+  - Includes metadata for detailed tracking
+  - Supports session tracking and analytics
 
 ## Features
 
@@ -85,6 +114,7 @@ The application uses a custom database schema designed according to the data dic
 - 🎯 **Skill Trees**: Hierarchical learning paths (framework in place)
 - 🎨 **Modern UI**: Tailwind CSS with dark theme
 - 📱 **Responsive**: Mobile-friendly design
+- 📊 **Activity Logging**: Comprehensive user activity tracking with MongoDB
 
 ## Project Structure
 
@@ -96,7 +126,8 @@ src/
 │   └── api/            # API routes (if needed)
 ├── components/         # Reusable components
 ├── lib/               # Utilities and configurations
-│   └── supabase/      # Supabase client setup
+│   ├── supabase/      # Supabase client setup
+│   └── mongodb/       # MongoDB client and activity logging
 └── types/             # TypeScript type definitions
 
 supabase/
@@ -121,6 +152,12 @@ supabase/
    - Confirm Supabase project is active
    - Check that `supabase/schema.sql` was executed in SQL Editor
    - Verify RLS policies are correctly applied
+
+4. **MongoDB connection issues**
+   - Verify `MONGODB_URI` in `.env.local` is correct
+   - Check MongoDB Atlas network access list includes your IP
+   - Ensure database user has proper permissions
+   - Activity logging will fail silently if MongoDB is unavailable (won't break the app)
 
 ## Contributing
 
