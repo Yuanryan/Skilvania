@@ -2,6 +2,7 @@ import NextAuth from "next-auth"
 import Google from "next-auth/providers/google"
 import Credentials from "next-auth/providers/credentials"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import bcrypt from "bcryptjs"
 import { logActivity } from "@/lib/mongodb/activity"
 
@@ -38,7 +39,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
-        const supabase = await createClient();
         const email = credentials.email as string;
         const password = credentials.password as string;
         const isSignUp = credentials.isSignUp === "true";
@@ -50,8 +50,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             throw new Error("Username is required for registration");
           }
 
+          // 使用 admin client 繞過 RLS 進行用戶檢查和創建
+          const adminSupabase = createAdminClient();
+
           // Check if user already exists
-          const { data: existingUser } = await supabase
+          const { data: existingUser } = await adminSupabase
             .from('USER')
             .select('UserID')
             .eq('Email', email)
@@ -62,7 +65,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           }
 
           // Check if username is taken
-          const { data: existingUsername } = await supabase
+          const { data: existingUsername } = await adminSupabase
             .from('USER')
             .select('UserID')
             .eq('Username', username)
@@ -75,7 +78,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           // Hash password and create user
           const hashedPassword = await bcrypt.hash(password, 10);
 
-          const { data: newUser, error } = await supabase
+          const { data: newUser, error } = await adminSupabase
             .from('USER')
             .insert({
               Username: username,
@@ -87,7 +90,25 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
           if (error) {
             console.error("Error creating user:", error);
-            throw new Error("Failed to create user");
+            console.error("Error details:", {
+              code: error.code,
+              message: error.message,
+              details: error.details,
+              hint: error.hint
+            });
+            
+            // 檢查是否是網絡或配置錯誤
+            const errorMessage = error.message || '';
+            if (errorMessage.includes('html') || errorMessage.includes('500') || errorMessage.includes('Internal Server Error')) {
+              throw new Error("Database connection failed. Please check Supabase configuration (URL and Service Role Key).");
+            }
+            
+            // 檢查是否是權限錯誤
+            if (error.code === '42501' || errorMessage.includes('permission') || errorMessage.includes('RLS')) {
+              throw new Error("Permission denied. Please check database RLS policies.");
+            }
+            
+            throw new Error(`Failed to create user: ${errorMessage || 'Unknown error'}`);
           }
 
           // 自動記錄註冊活動
@@ -102,8 +123,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             name: newUser.Username,
           };
         } else {
-          // Login logic
-          const { data: user, error } = await supabase
+          // Login logic - 使用 admin client 繞過 RLS
+          const adminSupabase = createAdminClient();
+          const { data: user, error } = await adminSupabase
             .from('USER')
             .select('UserID, Username, Email, Password')
             .eq('Email', email)

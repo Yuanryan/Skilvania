@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { mockAPI, shouldUseMock } from '@/lib/mock/creatorData';
-import { withTimeout, isNetworkError } from '@/lib/utils/timeout';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
 import { logActivity } from '@/lib/mongodb/activity';
 
@@ -34,16 +32,15 @@ export async function GET(request: NextRequest) {
 
       const { data: courses, error } = await query;
 
-      // 如果資料庫表不存在或連接超時，返回空陣列（瀏覽模式不支援 mock）
-      if (error && (shouldUseMock(error) || isNetworkError(error))) {
-        console.log('📦 Database unavailable for public browsing');
-        return NextResponse.json({ courses: [] });
-      }
-
       if (error) {
         console.error('Error fetching published courses:', error);
+        // 如果是表不存在的錯誤，返回空數組而不是錯誤
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          console.log('Course table does not exist, returning empty array');
+          return NextResponse.json({ courses: [] });
+        }
         return NextResponse.json(
-          { error: '獲取課程失敗' },
+          { error: '獲取課程失敗', details: error.message },
           { status: 500 }
         );
       }
@@ -91,25 +88,6 @@ export async function GET(request: NextRequest) {
     const userId = await getUserIdFromSession(session.user.id);
     
     if (userId === null) {
-      // 可能是 Mock 模式或使用者不存在
-      // 檢查是否是 Mock 模式（表不存在）
-      const { error: testError } = await supabase.from('auth_user_bridge').select('user_id').limit(1);
-      if (testError && shouldUseMock(testError)) {
-        console.log('📦 Using mock data (database unavailable)');
-        const mockUserId = 1;
-        const { courses } = mockAPI.getCourses(mockUserId);
-        const formattedCourses = courses.map((course: any) => ({
-          id: course.CourseID.toString(),
-          title: course.Title,
-          description: course.Description,
-          creatorId: course.CreatorID.toString(),
-          status: course.Status || 'draft',
-          totalNodes: course.TotalNodes || 0,
-          createdAt: course.CreatedAt,
-          updatedAt: course.UpdatedAt
-        }));
-        return NextResponse.json({ courses: formattedCourses, _mock: true });
-      }
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
@@ -120,26 +98,9 @@ export async function GET(request: NextRequest) {
       .eq('CreatorID', userId)
       .order('UpdatedAt', { ascending: false });
 
-    // 如果資料庫表不存在或連接超時，使用 mock 資料
-    if (error && (shouldUseMock(error) || isNetworkError(error))) {
-      console.log('📦 Using mock data (database unavailable)');
-      const { courses: mockCourses } = mockAPI.getCourses(userId);
-      const formattedCourses = mockCourses.map((course: any) => ({
-        id: course.CourseID.toString(),
-        title: course.Title,
-        description: course.Description,
-        creatorId: course.CreatorID.toString(),
-        status: course.Status || 'draft',
-        totalNodes: course.TotalNodes || 0,
-        createdAt: course.CreatedAt,
-        updatedAt: course.UpdatedAt
-      }));
-      return NextResponse.json({ courses: formattedCourses, _mock: true });
-    }
-
     if (error) {
       console.error('Error fetching courses:', error);
-      return NextResponse.json({ error: 'Failed to fetch courses' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to fetch courses', details: error.message }, { status: 500 });
     }
 
     // 轉換資料庫欄位格式為前端期望的格式
@@ -180,27 +141,6 @@ export async function POST(request: NextRequest) {
     const userId = await getUserIdFromSession(session.user.id);
     
     if (userId === null) {
-      // 可能是 Mock 模式或使用者不存在
-      // 檢查是否是 Mock 模式（表不存在）
-      const supabase = createAdminClient();
-      const { error: testError } = await supabase.from('auth_user_bridge').select('user_id').limit(1);
-      if (testError && shouldUseMock(testError)) {
-        console.log('📦 Using mock data (database unavailable)');
-        const mockUserId = 1;
-        const { course } = mockAPI.createCourse(mockUserId, title.trim(), description?.trim());
-        return NextResponse.json({ 
-          courseId: course.CourseID,
-          course: {
-            id: course.CourseID.toString(),
-            title: course.Title,
-            description: course.Description,
-            creatorId: course.CreatorID.toString(),
-            status: course.Status,
-            totalNodes: course.TotalNodes
-          },
-          _mock: true
-        }, { status: 201 });
-      }
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
@@ -220,27 +160,9 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
-    // 如果資料庫表不存在或連接超時，使用 mock 資料
-    if (error && (shouldUseMock(error) || isNetworkError(error))) {
-      console.log('📦 Using mock data (database unavailable)');
-      const { course: mockCourse } = mockAPI.createCourse(userId, title.trim(), description?.trim());
-      return NextResponse.json({ 
-        courseId: mockCourse.CourseID,
-        course: {
-          id: mockCourse.CourseID.toString(),
-          title: mockCourse.Title,
-          description: mockCourse.Description,
-          creatorId: mockCourse.CreatorID.toString(),
-          status: mockCourse.Status,
-          totalNodes: mockCourse.TotalNodes
-        },
-        _mock: true
-      }, { status: 201 });
-    }
-
     if (error) {
       console.error('Error creating course:', error);
-      return NextResponse.json({ error: 'Failed to create course' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to create course', details: error.message }, { status: 500 });
     }
 
     // 自動記錄課程創建活動

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { mockAPI, shouldUseMock } from '@/lib/mock/creatorData';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
 
 // GET /api/courses/[courseId] - 獲取單個課程詳情（包含節點和連接）
@@ -23,50 +22,6 @@ export async function GET(
       .eq('CourseID', parseInt(courseId))
       .single();
 
-    // 如果資料庫表不存在，使用 mock 資料
-    if (courseError && shouldUseMock(courseError)) {
-      console.log('📦 Using mock data (database tables not found)');
-      const { course: mockCourse, nodes: mockNodes, edges: mockEdges } = mockAPI.getCourse(parseInt(courseId));
-      
-      if (!mockCourse) {
-        return NextResponse.json({ error: 'Course not found' }, { status: 404 });
-      }
-
-      const formattedNodes = (mockNodes || []).map((node: any) => ({
-        id: node.NodeID.toString(),
-        title: node.Title,
-        xp: node.XP,
-        type: node.Type,
-        x: node.X,
-        y: node.Y,
-        iconName: node.IconName || 'Code',
-        description: node.Description || undefined
-      }));
-
-      const formattedEdges = (mockEdges || []).map((edge: any) => ({
-        id: `e-${edge.EdgeID}`,
-        from: edge.FromNodeID.toString(),
-        to: edge.ToNodeID.toString()
-      }));
-
-      return NextResponse.json({
-        course: {
-          id: mockCourse.CourseID.toString(),
-          title: mockCourse.Title,
-          description: mockCourse.Description,
-          creatorId: mockCourse.CreatorID.toString(),
-          author: 'Skilvania Team',
-          status: mockCourse.Status,
-          totalNodes: mockCourse.TotalNodes,
-          students: 1234,
-          updatedAt: mockCourse.UpdatedAt || new Date().toISOString()
-        },
-        nodes: formattedNodes,
-        edges: formattedEdges,
-        _mock: true
-      });
-    }
-
     if (courseError || !course) {
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });
     }
@@ -78,61 +33,6 @@ export async function GET(
       .eq('CourseID', parseInt(courseId))
       .order('CreatedAt', { ascending: true });
 
-    if (nodesError && shouldUseMock(nodesError)) {
-      console.log('📦 Using mock data for nodes');
-      const { nodes: mockNodes } = mockAPI.getCourse(parseInt(courseId));
-      const formattedNodes = (mockNodes || []).map((node: any) => ({
-        id: node.NodeID.toString(),
-        title: node.Title,
-        xp: node.XP,
-        type: node.Type,
-        x: node.X,
-        y: node.Y,
-        iconName: node.IconName || 'Code',
-        description: node.Description || undefined
-      }));
-
-      const { edges: mockEdges } = mockAPI.getCourse(parseInt(courseId));
-      const formattedEdges = (mockEdges || []).map((edge: any) => ({
-        id: `e-${edge.EdgeID}`,
-        from: edge.FromNodeID.toString(),
-        to: edge.ToNodeID.toString()
-      }));
-
-      // 獲取創建者資訊
-      let author = 'Unknown';
-      try {
-        const { data: creator } = await supabase
-          .from('USER')
-          .select('Username')
-          .eq('UserID', course.CreatorID)
-          .single();
-        
-        if (creator) {
-          author = creator.Username;
-        }
-      } catch (err) {
-        console.error('Error fetching creator:', err);
-      }
-
-      return NextResponse.json({
-        course: {
-          id: course.CourseID.toString(),
-          title: course.Title,
-          description: course.Description,
-          creatorId: course.CreatorID.toString(),
-          author: author,
-          status: course.Status,
-          totalNodes: course.TotalNodes,
-          students: 0,
-          updatedAt: course.UpdatedAt || new Date().toISOString()
-        },
-        nodes: formattedNodes,
-        edges: formattedEdges,
-        _mock: true
-      });
-    }
-
     if (nodesError) {
       console.error('Error fetching nodes:', nodesError);
       return NextResponse.json({ error: 'Failed to fetch nodes' }, { status: 500 });
@@ -143,60 +43,6 @@ export async function GET(
       .from('edge')
       .select('*')
       .eq('CourseID', parseInt(courseId));
-
-    if (edgesError && shouldUseMock(edgesError)) {
-      console.log('📦 Using mock data for edges');
-      const { edges: mockEdges } = mockAPI.getCourse(parseInt(courseId));
-      const formattedEdges = (mockEdges || []).map((edge: any) => ({
-        id: `e-${edge.EdgeID}`,
-        from: edge.FromNodeID.toString(),
-        to: edge.ToNodeID.toString()
-      }));
-
-      const formattedNodes = (nodes || []).map(node => ({
-        id: node.NodeID.toString(),
-        title: node.Title,
-        xp: node.XP,
-        type: node.Type,
-        x: node.X,
-        y: node.Y,
-        iconName: node.IconName || 'Code',
-        description: node.Description || undefined
-      }));
-
-      // 獲取創建者資訊
-      let author = 'Unknown';
-      try {
-        const { data: creator } = await supabase
-          .from('USER')
-          .select('Username')
-          .eq('UserID', course.CreatorID)
-          .single();
-        
-        if (creator) {
-          author = creator.Username;
-        }
-      } catch (err) {
-        console.error('Error fetching creator:', err);
-      }
-
-      return NextResponse.json({
-        course: {
-          id: course.CourseID.toString(),
-          title: course.Title,
-          description: course.Description,
-          creatorId: course.CreatorID.toString(),
-          author: author,
-          status: course.Status,
-          totalNodes: course.TotalNodes,
-          students: 0,
-          updatedAt: course.UpdatedAt || new Date().toISOString()
-        },
-        nodes: formattedNodes,
-        edges: formattedEdges,
-        _mock: true
-      });
-    }
 
     if (edgesError) {
       console.error('Error fetching edges:', edgesError);

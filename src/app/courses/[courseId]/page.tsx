@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Navbar } from '@/components/ui/Navbar';
 import { Play, Share2, GitBranch, ArrowLeft } from 'lucide-react';
 import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
 
 interface CourseData {
   id: string;
@@ -16,7 +17,11 @@ interface CourseData {
 
 async function fetchCourseData(courseId: string): Promise<CourseData | null> {
   try {
-    // 在服務器組件中使用絕對 URL
+    // 獲取請求頭以傳遞 cookies
+    const headersList = await headers();
+    const cookie = headersList.get('cookie') || '';
+
+    // 構建 API URL
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
                     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
     
@@ -24,6 +29,7 @@ async function fetchCourseData(courseId: string): Promise<CourseData | null> {
       cache: 'no-store',
       headers: {
         'Content-Type': 'application/json',
+        ...(cookie && { Cookie: cookie }),
       },
     });
 
