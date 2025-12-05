@@ -1,8 +1,12 @@
-import { auth } from "@/lib/auth/config"
 import { NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 
-export default auth((req) => {
-  const isLoggedIn = !!req.auth
+export default async function middleware(req: NextRequest) {
+  // 檢查 NextAuth session cookie (NextAuth v5 使用 authjs.session-token)
+  const sessionToken = req.cookies.get('authjs.session-token') || 
+                       req.cookies.get('__Secure-authjs.session-token')
+  const isLoggedIn = !!sessionToken
+  
   const isAuthPage = req.nextUrl.pathname.startsWith('/login') ||
                      req.nextUrl.pathname.startsWith('/register') ||
                      req.nextUrl.pathname.startsWith('/auth')
@@ -32,7 +36,7 @@ export default auth((req) => {
   }
 
   return NextResponse.next()
-})
+}
 
 export const config = {
   matcher: [
