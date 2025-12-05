@@ -131,10 +131,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description } = body;
+    const { title, description, tags } = body;
 
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
+    }
+
+    // 驗證 tags 格式
+    if (tags && !Array.isArray(tags)) {
+      return NextResponse.json({ error: 'Tags must be an array' }, { status: 400 });
     }
 
     // 獲取當前使用者的 UserID
@@ -163,6 +168,59 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error creating course:', error);
       return NextResponse.json({ error: 'Failed to create course', details: error.message }, { status: 500 });
+    }
+
+    // 處理標籤關聯
+    if (tags && Array.isArray(tags) && tags.length > 0) {
+      // 獲取或創建標籤
+      const tagIds: number[] = [];
+      for (const tagName of tags) {
+        if (typeof tagName !== 'string' || !tagName.trim()) continue;
+
+        // 檢查標籤是否存在
+        const { data: existingTag } = await supabase
+          .from('tag')
+          .select('TagID')
+          .eq('Name', tagName.trim())
+          .single();
+
+        let tagId: number;
+        if (existingTag) {
+          tagId = existingTag.TagID;
+        } else {
+          // 創建新標籤
+          const { data: newTag, error: tagError } = await supabase
+            .from('tag')
+            .insert({ Name: tagName.trim() })
+            .select('TagID')
+            .single();
+
+          if (tagError || !newTag) {
+            console.error('Error creating tag:', tagError);
+            continue;
+          }
+          tagId = newTag.TagID;
+        }
+
+        tagIds.push(tagId);
+      }
+
+      // 創建課程標籤關聯
+      if (tagIds.length > 0) {
+        const courseTags = tagIds.map(tagId => ({
+          CourseID: course.CourseID,
+          TagID: tagId,
+        }));
+
+        const { error: courseTagError } = await supabase
+          .from('course_tag')
+          .insert(courseTags);
+
+        if (courseTagError) {
+          console.error('Error creating course tags:', courseTagError);
+          // 不中斷流程，標籤創建失敗不影響課程創建
+        }
+      }
     }
 
     // 自動記錄課程創建活動

@@ -26,6 +26,9 @@ export default function CreatorDashboardPage() {
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newCourseTitle, setNewCourseTitle] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [availableTags, setAvailableTags] = useState<Array<{ TagID: number; Name: string }>>([]);
   const menuRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const router = useRouter();
 
@@ -70,6 +73,62 @@ export default function CreatorDashboardPage() {
     }
   };
 
+  // 獲取所有標籤
+  useEffect(() => {
+    if (showCreateModal) {
+      fetch('/api/tags')
+        .then(res => res.json())
+        .then(data => {
+          if (data.tags) {
+            setAvailableTags(data.tags);
+          }
+        })
+        .catch(err => console.error('Error fetching tags:', err));
+    }
+  }, [showCreateModal]);
+
+  const handleAddTag = (tagName: string) => {
+    const trimmedName = tagName.trim();
+    if (!trimmedName || selectedTags.includes(trimmedName)) return;
+    
+    // 只添加到本地列表，不立即保存到数据库
+    setSelectedTags(prev => [...prev, trimmedName]);
+    setTagInput('');
+  };
+
+  const handleRemoveTag = (tagName: string) => {
+    setSelectedTags(prev => prev.filter(t => t !== tagName));
+  };
+
+  const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // 按空格键创建tag
+    if (e.key === ' ' && tagInput.trim()) {
+      e.preventDefault();
+      handleAddTag(tagInput);
+    }
+    // Enter键仍然可以创建tag（备用方式）
+    if (e.key === 'Enter' && tagInput.trim()) {
+      e.preventDefault();
+      handleAddTag(tagInput);
+    }
+  };
+
+  const handleTagInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setTagInput(value);
+    
+    // 如果输入包含空格，自动创建tag
+    if (value.includes(' ')) {
+      const parts = value.split(' ').filter(p => p.trim());
+      if (parts.length > 0) {
+        // 最后一个部分保留在输入框中，其他部分创建为tag
+        const tagsToAdd = parts.slice(0, -1);
+        tagsToAdd.forEach(tag => handleAddTag(tag));
+        setTagInput(parts[parts.length - 1]);
+      }
+    }
+  };
+
   const handleCreateCourse = async () => {
     if (!newCourseTitle.trim()) return;
 
@@ -78,7 +137,10 @@ export default function CreatorDashboardPage() {
       const response = await fetch('/api/courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newCourseTitle.trim() })
+        body: JSON.stringify({ 
+          title: newCourseTitle.trim(),
+          tags: selectedTags
+        })
       });
 
       if (!response.ok) {
@@ -90,6 +152,8 @@ export default function CreatorDashboardPage() {
       const data = await response.json();
       setShowCreateModal(false);
       setNewCourseTitle('');
+      setSelectedTags([]);
+      setTagInput('');
       router.push(`/creator/${data.courseId}/editor`);
     } catch (error: any) {
       console.error('Error creating course:', error);
@@ -102,12 +166,16 @@ export default function CreatorDashboardPage() {
   const openCreateModal = () => {
     setShowCreateModal(true);
     setNewCourseTitle('');
+    setSelectedTags([]);
+    setTagInput('');
   };
 
   const closeCreateModal = () => {
     if (!creating) {
       setShowCreateModal(false);
       setNewCourseTitle('');
+      setSelectedTags([]);
+      setTagInput('');
     }
   };
 
@@ -369,7 +437,8 @@ export default function CreatorDashboardPage() {
                     value={newCourseTitle}
                     onChange={(e) => setNewCourseTitle(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newCourseTitle.trim() && !creating) {
+                      if (e.key === 'Enter' && newCourseTitle.trim() && !creating && e.target === e.currentTarget) {
+                        e.preventDefault();
                         handleCreateCourse();
                       }
                       if (e.key === 'Escape') {
@@ -381,6 +450,65 @@ export default function CreatorDashboardPage() {
                     autoFocus
                     disabled={creating}
                   />
+                </div>
+
+                <div>
+                  <label htmlFor="course-tags" className="block text-sm font-medium text-slate-300 mb-2">
+                    Tags (Skills)
+                  </label>
+                  <div className="space-y-2">
+                    <input
+                      id="course-tags"
+                      type="text"
+                      value={tagInput}
+                      onChange={handleTagInputChange}
+                      onKeyDown={handleTagInputKeyDown}
+                      placeholder="輸入標籤名稱，按空格鍵或 Enter 創建標籤 (例如: JavaScript React)"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                      disabled={creating}
+                    />
+                    {selectedTags.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {selectedTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center gap-1 bg-blue-600/20 text-blue-300 px-3 py-1 rounded-full text-sm border border-blue-500/30"
+                          >
+                            {tag}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTag(tag)}
+                              disabled={creating}
+                              className="hover:text-blue-100 transition-colors disabled:opacity-50"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {availableTags.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs text-slate-400 mb-1">建議標籤（點擊添加）:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {availableTags
+                            .filter(tag => !selectedTags.includes(tag.Name))
+                            .slice(0, 10)
+                            .map((tag) => (
+                              <button
+                                key={tag.TagID}
+                                type="button"
+                                onClick={() => handleAddTag(tag.Name)}
+                                disabled={creating}
+                                className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded border border-slate-700 transition-colors disabled:opacity-50"
+                              >
+                                {tag.Name}
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="flex items-center gap-3 pt-2">

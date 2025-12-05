@@ -28,12 +28,28 @@ export default function CoursePreviewPage() {
   const [saving, setSaving] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDescription, setEditedDescription] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [availableTags, setAvailableTags] = useState<Array<{ TagID: number; Name: string }>>([]);
 
   useEffect(() => {
     if (courseId) {
       loadCourse();
+      loadTags();
     }
   }, [courseId]);
+
+  const loadTags = async () => {
+    try {
+      const response = await fetch('/api/tags');
+      const data = await response.json();
+      if (data.tags) {
+        setAvailableTags(data.tags);
+      }
+    } catch (error) {
+      console.error('Error fetching tags:', error);
+    }
+  };
 
   const loadCourse = async () => {
     try {
@@ -46,6 +62,7 @@ export default function CoursePreviewPage() {
       setCourse(data.course);
       setEditedTitle(data.course.title);
       setEditedDescription(data.course.description || '');
+      setSelectedTags(data.course.tags || []);
     } catch (error) {
       console.error('Error loading course:', error);
       alert('Failed to load course');
@@ -64,7 +81,8 @@ export default function CoursePreviewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: editedTitle.trim(),
-          description: editedDescription.trim() || null
+          description: editedDescription.trim() || null,
+          tags: selectedTags
         })
       });
 
@@ -75,6 +93,7 @@ export default function CoursePreviewPage() {
 
       const data = await response.json();
       setCourse(data.course);
+      setSelectedTags(data.course.tags || []);
       setEditing(false);
     } catch (error: any) {
       console.error('Error saving course:', error);
@@ -88,8 +107,49 @@ export default function CoursePreviewPage() {
     if (course) {
       setEditedTitle(course.title);
       setEditedDescription(course.description || '');
+      setSelectedTags(course.tags || []);
     }
     setEditing(false);
+  };
+
+  const handleAddTag = (tagName: string) => {
+    const trimmedName = tagName.trim();
+    if (!trimmedName || selectedTags.includes(trimmedName)) return;
+    setSelectedTags(prev => [...prev, trimmedName]);
+    setTagInput('');
+  };
+
+  const handleRemoveTag = (tagName: string) => {
+    setSelectedTags(prev => prev.filter(t => t !== tagName));
+  };
+
+  const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // 按空格键创建tag
+    if (e.key === ' ' && tagInput.trim()) {
+      e.preventDefault();
+      handleAddTag(tagInput);
+    }
+    // Enter键仍然可以创建tag（备用方式）
+    if (e.key === 'Enter' && tagInput.trim()) {
+      e.preventDefault();
+      handleAddTag(tagInput);
+    }
+  };
+
+  const handleTagInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setTagInput(value);
+    
+    // 如果输入包含空格，自动创建tag
+    if (value.includes(' ')) {
+      const parts = value.split(' ').filter(p => p.trim());
+      if (parts.length > 0) {
+        // 最后一个部分保留在输入框中，其他部分创建为tag
+        const tagsToAdd = parts.slice(0, -1);
+        tagsToAdd.forEach(tag => handleAddTag(tag));
+        setTagInput(parts[parts.length - 1]);
+      }
+    }
   };
 
   if (loading) {
@@ -193,10 +253,70 @@ export default function CoursePreviewPage() {
                         <textarea
                           value={editedDescription}
                           onChange={(e) => setEditedDescription(e.target.value)}
-                          className="w-full text-lg text-slate-300 mb-8 bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:border-emerald-500 resize-none"
+                          className="w-full text-lg text-slate-300 mb-6 bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:border-emerald-500 resize-none"
                           rows={4}
                           placeholder="Course Description"
                         />
+                        
+                        {/* Tags Editor */}
+                        <div className="mb-8">
+                          <label htmlFor="edit-tags" className="block text-sm font-medium text-slate-300 mb-2">
+                            Tags (Skills)
+                          </label>
+                          <div className="space-y-2">
+                            <input
+                              id="edit-tags"
+                              type="text"
+                              value={tagInput}
+                              onChange={handleTagInputChange}
+                              onKeyDown={handleTagInputKeyDown}
+                              placeholder="輸入標籤名稱，按空格鍵或 Enter 創建標籤 (例如: JavaScript React)"
+                              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                              disabled={saving}
+                            />
+                            {selectedTags.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mt-2">
+                                {selectedTags.map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="inline-flex items-center gap-1 bg-emerald-600/20 text-emerald-300 px-3 py-1 rounded-full text-sm border border-emerald-500/30"
+                                  >
+                                    {tag}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveTag(tag)}
+                                      disabled={saving}
+                                      className="hover:text-emerald-100 transition-colors disabled:opacity-50"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {availableTags.length > 0 && (
+                              <div className="mt-2">
+                                <p className="text-xs text-slate-400 mb-1">建議標籤（點擊添加）:</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {availableTags
+                                    .filter(tag => !selectedTags.includes(tag.Name))
+                                    .slice(0, 10)
+                                    .map((tag) => (
+                                      <button
+                                        key={tag.TagID}
+                                        type="button"
+                                        onClick={() => handleAddTag(tag.Name)}
+                                        disabled={saving}
+                                        className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded border border-slate-700 transition-colors disabled:opacity-50"
+                                      >
+                                        {tag.Name}
+                                      </button>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </>
                     ) : (
                       <>
@@ -259,6 +379,22 @@ export default function CoursePreviewPage() {
                                 <span className="ml-2 text-white">0</span>
                             </div>
                         </div>
+                    </div>
+                    
+                    {/* Skills You'll Grow */}
+                    <div className="bg-slate-950/50 rounded-xl p-6 border border-white/5">
+                        <h3 className="text-slate-400 text-xs font-bold uppercase mb-4">Skills You'll Grow</h3>
+                        {selectedTags.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                                {selectedTags.map(tag => (
+                                    <span key={tag} className="text-xs bg-slate-800 text-slate-300 px-2 py-1 rounded border border-slate-700">
+                                        {tag}
+                                    </span>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-slate-500 text-sm">No tags yet</p>
+                        )}
                     </div>
                 </div>
             </div>

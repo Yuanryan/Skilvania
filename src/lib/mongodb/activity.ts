@@ -35,8 +35,19 @@ export async function logActivity(
       timestamp: new Date().toISOString(),
     });
     
-    const db = await getDatabase();
-    const collection = db.collection<UserActivity>(COLLECTION_NAME);
+    let db;
+    try {
+      db = await getDatabase();
+    } catch (dbError: any) {
+      // 如果是 MongoDB 連接錯誤，記錄但不中斷
+      if (dbError.isMongoError || dbError.message?.includes('MongoDB') || dbError.handled) {
+        console.warn('⚠️ [logActivity] MongoDB 連接失敗，跳過活動記錄:', dbError.message);
+        return;
+      }
+      throw dbError; // 其他錯誤重新拋出
+    }
+    
+    const collection = db.collection(COLLECTION_NAME);
 
     // 構建最小必要活動記錄
     const activity: Omit<UserActivity, '_id'> = {
@@ -97,7 +108,7 @@ export async function logActivities(
     }
     
     const db = await getDatabase();
-    const collection = db.collection<UserActivity>(COLLECTION_NAME);
+    const collection = db.collection(COLLECTION_NAME);
 
     const docs = activities.map((activity) => ({
       userId: activity.userId,
@@ -109,7 +120,7 @@ export async function logActivities(
     }));
 
     if (docs.length > 0) {
-      await collection.insertMany(docs as UserActivity[]);
+      await collection.insertMany(docs);
     }
   } catch (error) {
     console.error('Error logging activities:', error);
@@ -130,7 +141,7 @@ export async function getActivities(
     }
     
     const db = await getDatabase();
-    const collection = db.collection<UserActivity>(COLLECTION_NAME);
+    const collection = db.collection(COLLECTION_NAME);
 
     const filter: any = {};
 
@@ -171,7 +182,8 @@ export async function getActivities(
       .limit(query.limit || 100)
       .skip(query.skip || 0);
 
-    return await cursor.toArray();
+    const results = await cursor.toArray();
+    return results as unknown as UserActivity[];
   } catch (error) {
     console.error('Error getting activities:', error);
     throw error;
@@ -200,7 +212,7 @@ export async function getActivityStats(
     }
     
     const db = await getDatabase();
-    const collection = db.collection<UserActivity>(COLLECTION_NAME);
+    const collection = db.collection(COLLECTION_NAME);
 
     const filter: any = { userId };
     if (startDate || endDate) {
@@ -249,7 +261,7 @@ export async function deleteOldActivities(
 ): Promise<number> {
   try {
     const db = await getDatabase();
-    const collection = db.collection<UserActivity>(COLLECTION_NAME);
+    const collection = db.collection(COLLECTION_NAME);
 
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);

@@ -38,6 +38,26 @@ export async function GET(
       return NextResponse.json({ error: 'Failed to fetch nodes' }, { status: 500 });
     }
 
+    // 獲取標籤
+    const { data: courseTags } = await supabase
+      .from('course_tag')
+      .select('TagID')
+      .eq('CourseID', parseInt(courseId));
+
+    // 獲取標籤名稱
+    let tags: string[] = [];
+    if (courseTags && courseTags.length > 0) {
+      const tagIds = courseTags.map(ct => ct.TagID);
+      const { data: tagData } = await supabase
+        .from('tag')
+        .select('Name')
+        .in('TagID', tagIds);
+      
+      if (tagData) {
+        tags = tagData.map(t => t.Name);
+      }
+    }
+
     // 獲取連接
     const { data: edges, error: edgesError } = await supabase
       .from('edge')
@@ -114,6 +134,7 @@ export async function GET(
         author: author,
         status: course.Status,
         totalNodes: course.TotalNodes,
+        tags: tags,
         students: studentsCount,
         updatedAt: course.UpdatedAt
       },
@@ -139,7 +160,12 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { title, description, status } = body;
+    const { title, description, status, tags } = body;
+
+    // 驗證 tags 格式
+    if (tags !== undefined && !Array.isArray(tags)) {
+      return NextResponse.json({ error: 'Tags must be an array' }, { status: 400 });
+    }
 
     // 獲取當前使用者的 UserID
     const userId = await getUserIdFromSession(session.user.id);
@@ -184,6 +210,86 @@ export async function PUT(
       return NextResponse.json({ error: 'Failed to update course' }, { status: 500 });
     }
 
+    // 處理標籤更新
+    if (tags !== undefined && Array.isArray(tags)) {
+      // 刪除現有的標籤關聯
+      await supabase
+        .from('course_tag')
+        .delete()
+        .eq('CourseID', parseInt(courseId));
+
+      // 如果有新標籤，創建新的關聯
+      if (tags.length > 0) {
+        const tagIds: number[] = [];
+        for (const tagName of tags) {
+          if (typeof tagName !== 'string' || !tagName.trim()) continue;
+
+          // 檢查標籤是否存在
+          const { data: existingTag } = await supabase
+            .from('tag')
+            .select('TagID')
+            .eq('Name', tagName.trim())
+            .single();
+
+          let tagId: number;
+          if (existingTag) {
+            tagId = existingTag.TagID;
+          } else {
+            // 創建新標籤
+            const { data: newTag, error: tagError } = await supabase
+              .from('tag')
+              .insert({ Name: tagName.trim() })
+              .select('TagID')
+              .single();
+
+            if (tagError || !newTag) {
+              console.error('Error creating tag:', tagError);
+              continue;
+            }
+            tagId = newTag.TagID;
+          }
+
+          tagIds.push(tagId);
+        }
+
+        // 創建課程標籤關聯
+        if (tagIds.length > 0) {
+          const courseTags = tagIds.map(tagId => ({
+            CourseID: parseInt(courseId),
+            TagID: tagId,
+          }));
+
+          const { error: courseTagError } = await supabase
+            .from('course_tag')
+            .insert(courseTags);
+
+          if (courseTagError) {
+            console.error('Error updating course tags:', courseTagError);
+            // 不中斷流程，標籤更新失敗不影響課程更新
+          }
+        }
+      }
+    }
+
+    // 獲取更新後的標籤
+    const { data: courseTags } = await supabase
+      .from('course_tag')
+      .select('TagID')
+      .eq('CourseID', parseInt(courseId));
+
+    let courseTagsList: string[] = [];
+    if (courseTags && courseTags.length > 0) {
+      const tagIds = courseTags.map(ct => ct.TagID);
+      const { data: tagData } = await supabase
+        .from('tag')
+        .select('Name')
+        .in('TagID', tagIds);
+      
+      if (tagData) {
+        courseTagsList = tagData.map(t => t.Name);
+      }
+    }
+
     return NextResponse.json({
       course: {
         id: updatedCourse.CourseID.toString(),
@@ -191,7 +297,8 @@ export async function PUT(
         description: updatedCourse.Description,
         creatorId: updatedCourse.CreatorID.toString(),
         status: updatedCourse.Status,
-        totalNodes: updatedCourse.TotalNodes
+        totalNodes: updatedCourse.TotalNodes,
+        tags: courseTagsList
       }
     });
   } catch (error) {

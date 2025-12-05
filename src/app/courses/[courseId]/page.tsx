@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Navbar } from '@/components/ui/Navbar';
-import { Play, Share2, GitBranch, ArrowLeft } from 'lucide-react';
+import { Play, Share2, GitBranch, Star, ArrowLeft } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { headers } from 'next/headers';
 
@@ -13,6 +13,7 @@ interface CourseData {
   totalNodes: number;
   updatedAt: string;
   status: string;
+  tags?: string[];
 }
 
 async function fetchCourseData(courseId: string): Promise<CourseData | null> {
@@ -67,6 +68,8 @@ export default async function CourseOverviewPage({ params }: { params: Promise<{
     notFound();
   }
 
+  const tags = courseData.tags || [];
+
   return (
     <div className="min-h-screen bg-deep-forest flex flex-col">
       <Navbar />
@@ -87,6 +90,9 @@ export default async function CourseOverviewPage({ params }: { params: Promise<{
                         <span className="px-3 py-1 rounded-full bg-emerald-900/30 text-emerald-400 text-xs font-bold uppercase border border-emerald-800/30">
                             {courseData.status === 'published' ? 'Published Course' : courseData.status === 'draft' ? 'Draft Course' : 'Archived Course'}
                         </span>
+                        <div className="flex items-center gap-1 text-amber-400 text-sm font-bold">
+                            <Star size={14} fill="currentColor" /> 4.8
+                        </div>
                     </div>
                     
                     <h1 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
@@ -124,6 +130,20 @@ export default async function CourseOverviewPage({ params }: { params: Promise<{
 
                 {/* Right Column / Stats */}
                 <div className="hidden md:block w-72 space-y-4">
+                    <div className="bg-slate-950/50 rounded-xl p-6 border border-white/5">
+                        <h3 className="text-slate-400 text-xs font-bold uppercase mb-4">Skills You'll Grow</h3>
+                        {tags.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                                {tags.map(tag => (
+                                    <span key={tag} className="text-xs bg-slate-800 text-slate-300 px-2 py-1 rounded border border-slate-700">
+                                        {tag}
+                                    </span>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-slate-500 text-sm">No tags available</p>
+                        )}
+                    </div>
                     <div className="bg-slate-950/50 rounded-xl p-6 border border-white/5">
                         <h3 className="text-slate-400 text-xs font-bold uppercase mb-4">Course Info</h3>
                         <div className="space-y-3">
