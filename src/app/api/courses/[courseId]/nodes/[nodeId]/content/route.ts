@@ -15,10 +15,10 @@ export async function GET(
     // 使用 admin client（GET 不需要權限檢查，因為是公開內容）
     const supabase = createAdminClient();
 
-    // 獲取節點內容
+    // 獲取節點內容和完整信息
     const { data: node, error } = await supabase
       .from('node')
-      .select('Content, Title')
+      .select('Content, Title, XP, Type, Description')
       .eq('NodeID', parseInt(nodeId))
       .eq('CourseID', parseInt(courseId))
       .single();
@@ -35,6 +35,9 @@ export async function GET(
       return NextResponse.json({
         content: content || '',
         title: title || 'Node',
+        xp: 100,
+        type: 'theory',
+        description: null,
         _mock: true
       });
     }
@@ -45,7 +48,10 @@ export async function GET(
 
     return NextResponse.json({
       content: node.Content || '',
-      title: node.Title
+      title: node.Title,
+      xp: node.XP || 100,
+      type: node.Type || 'theory',
+      description: node.Description || null
     });
   } catch (error) {
     console.error('Error in GET /api/courses/[courseId]/nodes/[nodeId]/content:', error);

@@ -55,8 +55,11 @@ export async function GET(
           title: mockCourse.Title,
           description: mockCourse.Description,
           creatorId: mockCourse.CreatorID.toString(),
+          author: 'Skilvania Team',
           status: mockCourse.Status,
-          totalNodes: mockCourse.TotalNodes
+          totalNodes: mockCourse.TotalNodes,
+          students: 1234,
+          updatedAt: mockCourse.UpdatedAt || new Date().toISOString()
         },
         nodes: formattedNodes,
         edges: formattedEdges,
@@ -96,14 +99,33 @@ export async function GET(
         to: edge.ToNodeID.toString()
       }));
 
+      // 獲取創建者資訊
+      let author = 'Unknown';
+      try {
+        const { data: creator } = await supabase
+          .from('USER')
+          .select('Username')
+          .eq('UserID', course.CreatorID)
+          .single();
+        
+        if (creator) {
+          author = creator.Username;
+        }
+      } catch (err) {
+        console.error('Error fetching creator:', err);
+      }
+
       return NextResponse.json({
         course: {
           id: course.CourseID.toString(),
           title: course.Title,
           description: course.Description,
           creatorId: course.CreatorID.toString(),
+          author: author,
           status: course.Status,
-          totalNodes: course.TotalNodes
+          totalNodes: course.TotalNodes,
+          students: 0,
+          updatedAt: course.UpdatedAt || new Date().toISOString()
         },
         nodes: formattedNodes,
         edges: formattedEdges,
@@ -142,14 +164,33 @@ export async function GET(
         description: node.Description || undefined
       }));
 
+      // 獲取創建者資訊
+      let author = 'Unknown';
+      try {
+        const { data: creator } = await supabase
+          .from('USER')
+          .select('Username')
+          .eq('UserID', course.CreatorID)
+          .single();
+        
+        if (creator) {
+          author = creator.Username;
+        }
+      } catch (err) {
+        console.error('Error fetching creator:', err);
+      }
+
       return NextResponse.json({
         course: {
           id: course.CourseID.toString(),
           title: course.Title,
           description: course.Description,
           creatorId: course.CreatorID.toString(),
+          author: author,
           status: course.Status,
-          totalNodes: course.TotalNodes
+          totalNodes: course.TotalNodes,
+          students: 0,
+          updatedAt: course.UpdatedAt || new Date().toISOString()
         },
         nodes: formattedNodes,
         edges: formattedEdges,
@@ -160,6 +201,44 @@ export async function GET(
     if (edgesError) {
       console.error('Error fetching edges:', edgesError);
       return NextResponse.json({ error: 'Failed to fetch edges' }, { status: 500 });
+    }
+
+    // 獲取創建者資訊
+    let author = 'Unknown';
+    try {
+      const { data: creator } = await supabase
+        .from('USER')
+        .select('Username')
+        .eq('UserID', course.CreatorID)
+        .single();
+      
+      if (creator) {
+        author = creator.Username;
+      }
+    } catch (err) {
+      console.error('Error fetching creator:', err);
+      // 繼續執行，使用默認值
+    }
+
+    // 計算學生數量（有多少不同的用戶學習過這個課程）
+    let studentsCount = 0;
+    try {
+      if (nodes && nodes.length > 0) {
+        const nodeIds = nodes.map(n => n.NodeID);
+        // 獲取所有學習過這個課程節點的用戶
+        const { data: progressData } = await supabase
+          .from('userprogress')
+          .select('UserID')
+          .in('NodeID', nodeIds);
+        
+        if (progressData && progressData.length > 0) {
+          // 去重，計算不同的用戶數量
+          studentsCount = new Set(progressData.map(p => p.UserID)).size;
+        }
+      }
+    } catch (err) {
+      console.error('Error counting students:', err);
+      // 繼續執行，使用默認值 0
     }
 
     // 轉換為前端需要的格式
@@ -186,8 +265,11 @@ export async function GET(
         title: course.Title,
         description: course.Description,
         creatorId: course.CreatorID.toString(),
+        author: author,
         status: course.Status,
-        totalNodes: course.TotalNodes
+        totalNodes: course.TotalNodes,
+        students: studentsCount,
+        updatedAt: course.UpdatedAt
       },
       nodes: formattedNodes,
       edges: formattedEdges

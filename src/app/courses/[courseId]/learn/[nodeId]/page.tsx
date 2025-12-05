@@ -2,47 +2,79 @@
 
 import React, { useState, useEffect } from 'react';
 import { Navbar } from '@/components/ui/Navbar';
-import { ArrowLeft, BookOpen, CheckCircle, PlayCircle, FileText, Award } from 'lucide-react';
+import { ArrowLeft, BookOpen, CheckCircle, PlayCircle, FileText, Award, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { logNodeView, logNodeComplete, logUserActivity } from '@/lib/utils/activityLogger';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import rehypeRaw from 'rehype-raw';
+import 'highlight.js/styles/github-dark.css';
+
+interface NodeData {
+  title: string;
+  content: string;
+  xp: number;
+  type: 'theory' | 'code' | 'project';
+  description: string | null;
+}
 
 export default function LessonContentPage() {
   const params = useParams();
   const router = useRouter();
   const [isCompleted, setIsCompleted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lesson, setLesson] = useState<NodeData | null>(null);
+  
+  // 載入節點內容
+  useEffect(() => {
+    const loadContent = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const courseId = params.courseId as string;
+        const nodeId = params.nodeId as string;
+        
+        const response = await fetch(`/api/courses/${courseId}/nodes/${nodeId}/content`);
+        if (!response.ok) {
+          throw new Error('Failed to load lesson content');
+        }
+        
+        const data = await response.json();
+        setLesson({
+          title: data.title || 'Untitled Lesson',
+          content: data.content || '',
+          xp: data.xp || 100,
+          type: data.type || 'theory',
+          description: data.description || null
+        });
+      } catch (err) {
+        console.error('Error loading lesson:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load lesson');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (params.courseId && params.nodeId) {
+      loadContent();
+    }
+  }, [params.courseId, params.nodeId]);
   
   // 自動記錄節點查看活動
   useEffect(() => {
     const nodeId = parseInt(params.nodeId as string);
     const courseId = parseInt(params.courseId as string);
-    if (nodeId && courseId) {
+    if (nodeId && courseId && lesson) {
       logNodeView(nodeId, courseId).catch(() => {}); // 靜默失敗，不影響頁面載入
     }
-  }, [params.nodeId, params.courseId]);
-
-  // Mock Content Data
-  const lesson = {
-    title: "Understanding the DOM",
-    type: "theory",
-    xp: 100,
-    content: `
-      <h2>What is the DOM?</h2>
-      <p>The Document Object Model (DOM) is a programming interface for web documents. It represents the page so that programs can change the document structure, style, and content. The DOM represents the document as nodes and objects; that way, programming languages can connect to the page.</p>
-      
-      <h3>Why is it important?</h3>
-      <p>JavaScript can use the DOM to:</p>
-      <ul>
-        <li>Change all the HTML elements in the page</li>
-        <li>Change all the HTML attributes in the page</li>
-        <li>Change all the CSS styles in the page</li>
-        <li>Remove existing HTML elements and attributes</li>
-        <li>Add new HTML elements and attributes</li>
-      </ul>
-    `
-  };
+  }, [params.nodeId, params.courseId, lesson]);
 
   const handleComplete = async () => {
+    if (!lesson) return;
+    
     setIsCompleted(true);
     
     const nodeId = parseInt(params.nodeId as string);
@@ -72,20 +104,54 @@ export default function LessonContentPage() {
       }
     }
     
-    // In a real app, this would trigger an API call
     setTimeout(() => {
       router.push(`/courses/${params.courseId}/tree`);
     }, 1500);
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-deep-forest flex flex-col">
+        <Navbar />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="animate-spin mx-auto text-emerald-500 mb-4" size={48} />
+            <p className="text-slate-400">載入課程內容中...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (error || !lesson) {
+    return (
+      <div className="min-h-screen bg-deep-forest flex flex-col">
+        <Navbar />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center bg-slate-900/50 border border-red-500/20 rounded-xl p-8">
+            <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
+            <h2 className="text-xl font-bold text-white mb-2">載入失敗</h2>
+            <p className="text-slate-400 mb-4">{error || '無法載入課程內容'}</p>
+            <Link
+              href={`/courses/${params.courseId}/tree`}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
+            >
+              <ArrowLeft size={16} /> 返回課程樹
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-deep-forest flex flex-col">
       <Navbar />
       
-      <main className="flex-1 max-w-4xl mx-auto w-full p-6 py-10">
+      <main className="flex-1 max-w-full sm:max-w-2xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full px-4 sm:px-6 md:px-8 py-6 sm:py-8 md:py-10">
         
         {/* Navigation Header */}
-        <div className="flex items-center gap-4 mb-8">
+        <div className="flex items-center gap-4 mb-6 sm:mb-8">
           <Link 
             href={`/courses/${params.courseId}/tree`} 
             className="p-2 rounded-lg bg-slate-900 border border-white/10 text-slate-400 hover:text-white transition-colors"
@@ -93,63 +159,44 @@ export default function LessonContentPage() {
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <div className="text-xs text-emerald-500 font-bold uppercase tracking-wider mb-1">Module 1: HTML Roots</div>
-            <h1 className="text-2xl font-bold text-white">{lesson.title}</h1>
+            <div className="text-xs text-emerald-500 font-bold uppercase tracking-wider mb-1">
+              {lesson.type === 'theory' ? 'Theory' : lesson.type === 'code' ? 'Code Challenge' : 'Project'}
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold text-white">{lesson.title}</h1>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
           
           {/* Main Content Area */}
-          <div className="lg:col-span-2 space-y-8">
+          <div className="lg:col-span-8 xl:col-span-9 space-y-6 sm:space-y-8">
             
-            {/* Video Placeholder */}
-            <div className="aspect-video bg-black rounded-2xl border border-white/10 relative overflow-hidden group cursor-pointer">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-16 h-16 rounded-full bg-emerald-600/90 flex items-center justify-center text-white shadow-2xl group-hover:scale-110 transition-transform">
-                  <PlayCircle size={32} fill="currentColor" />
-                </div>
-              </div>
-              <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
-                <div className="text-white font-bold text-sm">Video Lecture: DOM Manipulation Basics</div>
-                <div className="text-slate-400 text-xs">12:45</div>
-              </div>
-            </div>
-
-            {/* Text Content */}
-            <div className="prose prose-invert prose-emerald max-w-none">
-              <div dangerouslySetInnerHTML={{ __html: lesson.content }} />
-            </div>
-
-            {/* Quiz Section */}
-            <div className="bg-slate-900/50 border border-white/10 rounded-xl p-6">
-              <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                <Award className="text-amber-500" size={20} /> Knowledge Check
-              </h3>
-              <div className="space-y-3">
-                <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 hover:border-emerald-500/50 cursor-pointer transition-colors flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-full border border-slate-600"></div>
-                  <span className="text-slate-300 text-sm">The DOM is a programming language.</span>
-                </div>
-                <div className="p-3 rounded-lg bg-slate-950 border border-emerald-500 cursor-pointer transition-colors flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-full border-[5px] border-emerald-500 bg-transparent"></div>
-                  <span className="text-white text-sm">The DOM is an interface for web documents.</span>
-                </div>
-                <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 hover:border-emerald-500/50 cursor-pointer transition-colors flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-full border border-slate-600"></div>
-                  <span className="text-slate-300 text-sm">The DOM is a database.</span>
-                </div>
+            {/* Markdown Content */}
+            <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4 sm:p-6 md:p-8">
+              <div className="prose prose-invert prose-emerald max-w-none markdown-content">
+                {lesson.content ? (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeHighlight, rehypeRaw]}
+                  >
+                    {lesson.content}
+                  </ReactMarkdown>
+                ) : (
+                  <div className="text-slate-400 italic">
+                    <p>此課程節點還沒有內容。請稍後再來查看。</p>
+                  </div>
+                )}
               </div>
             </div>
 
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-6">
-            <div className="bg-slate-900 border border-white/10 rounded-xl p-6 sticky top-24">
+          <div className="lg:col-span-4 xl:col-span-3 space-y-6">
+            <div className="bg-slate-900 border border-white/10 rounded-xl p-4 sm:p-6 sticky top-20 sm:top-24">
               <div className="flex items-center justify-between mb-6">
                 <span className="text-slate-400 text-sm font-medium">XP Reward</span>
-                <span className="text-amber-400 font-bold">{lesson.xp} XP</span>
+                <span className="text-amber-400 font-bold">{lesson?.xp || 100} XP</span>
               </div>
               
               <button 
