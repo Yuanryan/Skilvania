@@ -1,15 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/ui/Navbar';
 
 /**
- * 測試登入頁面
- * 登入後不會跳轉，方便測試登入活動記錄
+ * 測試登入頁面內容組件
  */
-export default function TestLoginPage() {
+function TestLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
@@ -143,6 +142,27 @@ export default function TestLoginPage() {
         </form>
       </main>
     </div>
+  );
+}
+
+/**
+ * 測試登入頁面
+ * 登入後不會跳轉，方便測試登入活動記錄
+ */
+export default function TestLoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-950 text-slate-200">
+        <Navbar />
+        <main className="max-w-2xl mx-auto p-6 py-10">
+          <div className="flex items-center justify-center py-20">
+            <div className="text-slate-400">載入中...</div>
+          </div>
+        </main>
+      </div>
+    }>
+      <TestLoginContent />
+    </Suspense>
   );
 }
 

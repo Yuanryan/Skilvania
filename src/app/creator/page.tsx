@@ -268,7 +268,7 @@ export default function CreatorDashboardPage() {
                                 </Link>
                                 <div className="relative">
                                     <button 
-                                        ref={el => menuRefs.current[course.id] = el}
+                                        ref={el => { menuRefs.current[course.id] = el; }}
                                         onClick={(e) => toggleMenu(course.id, e)}
                                         className="p-2 hover:bg-slate-800 text-slate-500 hover:text-white rounded-lg transition-colors"
                                     >
