@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { auth } from '@/lib/auth/config';
+import { getUserIdFromSession } from '@/lib/utils/getUserId';
 import { Node, Edge } from '@/types';
 
 export async function GET(
@@ -17,7 +19,8 @@ export async function GET(
       );
     }
 
-    const supabase = await createClient();
+    // 使用 admin client 繞過 RLS（因為這是公開的課程數據）
+    const supabase = createAdminClient();
 
     // 驗證課程是否存在（公開訪問，不需要登錄）
     const { data: course, error: courseError } = await supabase
@@ -62,30 +65,26 @@ export async function GET(
       );
     }
 
-    // 嘗試獲取當前認證用戶（可選）
+    // 嘗試獲取當前認證用戶（使用 NextAuth）
     let completedNodeIds = new Set<string>();
     
-    const { data: { user: authUser } } = await supabase.auth.getUser();
+    const session = await auth();
     
     // 如果用戶已登錄，獲取用戶進度
-    if (authUser) {
+    if (session?.user?.id) {
       try {
-        // 通過 auth_user_bridge 獲取 user_id
-        const { data: bridgeData } = await supabase
-          .from('auth_user_bridge')
-          .select('user_id')
-          .eq('auth_user_id', authUser.id)
-          .single();
+        // 通過 NextAuth session 獲取 user_id
+        const userId = await getUserIdFromSession(session.user.id);
 
-        if (bridgeData?.user_id) {
-          const userId = bridgeData.user_id;
+        if (userId !== null && nodesData && nodesData.length > 0) {
+          const nodeIds = nodesData.map(n => n.NodeID);
           
-          // 獲取用戶進度
+          // 獲取用戶進度（使用 admin client 繞過 RLS）
           const { data: progressData, error: progressError } = await supabase
             .from('userprogress')
             .select('NodeID, Status')
             .eq('UserID', userId)
-            .in('NodeID', nodesData?.map(n => n.NodeID) || []);
+            .in('NodeID', nodeIds);
 
           if (!progressError && progressData) {
             completedNodeIds = new Set<string>(
@@ -93,6 +92,10 @@ export async function GET(
                 .filter(p => p.Status === 'completed')
                 .map(p => p.NodeID.toString())
             );
+          } else if (progressError) {
+            console.error('❌ 獲取用戶進度錯誤:', progressError);
+          } else {
+            console.log(`ℹ️ No progress data found for user ${userId}`);
           }
         }
       } catch (error) {

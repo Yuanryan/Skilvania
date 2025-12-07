@@ -75,33 +75,55 @@ export default function LessonContentPage() {
   const handleComplete = async () => {
     if (!lesson) return;
     
-    setIsCompleted(true);
-    
     const nodeId = parseInt(params.nodeId as string);
     const courseId = parseInt(params.courseId as string);
     
-    if (nodeId && courseId) {
-      // 自動記錄節點完成活動
-      logNodeComplete(nodeId, courseId, lesson.xp).catch(() => {});
-      
-      // 檢查是否完成所有節點（課程完成）
-      try {
-        const response = await fetch(`/api/courses/${courseId}/tree`);
-        if (response.ok) {
-          const data = await response.json();
-          const totalNodes = data.nodes?.length || 0;
-          const completedNodes = data.completedNodes?.length || 0;
-          
-          // 如果完成最後一個節點，記錄課程完成
-          if (totalNodes > 0 && completedNodes + 1 >= totalNodes) {
-            logUserActivity('course_complete', {
-              courseId,
-            }).catch(() => {});
+    if (!nodeId || !courseId) return;
+
+    try {
+      // 調用 API 更新用戶進度和 XP
+      const response = await fetch(`/api/courses/${courseId}/nodes/${nodeId}/complete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to complete node:', errorData.error || 'Unknown error');
+        // 即使 API 失敗，也顯示完成狀態（用戶體驗）
+        setIsCompleted(true);
+      } else {
+        const data = await response.json();
+        setIsCompleted(true);
+        
+        // 記錄節點完成活動到 MongoDB（用於分析）
+        logNodeComplete(nodeId, courseId, lesson.xp).catch(() => {});
+        
+        // 檢查是否完成所有節點（課程完成）
+        try {
+          const treeResponse = await fetch(`/api/courses/${courseId}/tree`);
+          if (treeResponse.ok) {
+            const treeData = await treeResponse.json();
+            const totalNodes = treeData.nodes?.length || 0;
+            const completedNodes = treeData.completedNodes?.length || 0;
+            
+            // 如果完成最後一個節點，記錄課程完成
+            if (totalNodes > 0 && completedNodes + 1 >= totalNodes) {
+              logUserActivity('course_complete', {
+                courseId,
+              }).catch(() => {});
+            }
           }
+        } catch (error) {
+          // 靜默失敗，不影響完成流程
         }
-      } catch (error) {
-        // 靜默失敗，不影響完成流程
       }
+    } catch (error) {
+      console.error('Error completing node:', error);
+      // 即使出錯，也顯示完成狀態
+      setIsCompleted(true);
     }
     
     setTimeout(() => {

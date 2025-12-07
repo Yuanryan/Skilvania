@@ -21,51 +21,93 @@ export default function TreePage() {
   const [error, setError] = useState<string | null>(null);
 
   // 從 API 獲取數據
-  useEffect(() => {
-    const fetchTreeData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const fetchTreeData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        const response = await fetch(`/api/courses/${courseId}/tree`);
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || '獲取數據失敗');
-        }
+      const response = await fetch(`/api/courses/${courseId}/tree`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '獲取數據失敗');
+      }
 
-        const data = await response.json();
-        setNodes(data.nodes || []);
-        setEdges(data.edges || []);
-        setCompletedNodes(new Set(data.completedNodes || []));
-        
-        // 自動記錄課程開始活動
+      const data = await response.json();
+      const isFirstLoad = nodes.length === 0;
+      setNodes(data.nodes || []);
+      setEdges(data.edges || []);
+      setCompletedNodes(new Set(data.completedNodes || []));
+      
+      // 自動記錄課程開始活動（只在首次載入時）
+      if (isFirstLoad) {
         const courseIdNum = parseInt(courseId);
         if (courseIdNum) {
           logUserActivity('course_start', {
             courseId: courseIdNum,
           }).catch(() => {}); // 靜默失敗，不影響頁面載入
         }
-      } catch (err) {
-        console.error('獲取 tree 數據錯誤:', err);
-        setError(err instanceof Error ? err.message : '未知錯誤');
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (err) {
+      console.error('獲取 tree 數據錯誤:', err);
+      setError(err instanceof Error ? err.message : '未知錯誤');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     if (courseId) {
       fetchTreeData();
     }
   }, [courseId]);
 
-  // Mock "Learning" Action (暫時保留用於調試)
-  const handleCompleteNode = (nodeId: string) => {
-    setCompletedNodes(prev => {
+  // 完成節點（調試功能，但也會更新數據庫）
+  const handleCompleteNode = async (nodeId: string) => {
+    const nodeIdInt = parseInt(nodeId);
+    const courseIdInt = parseInt(courseId);
+    
+    if (!nodeIdInt || !courseIdInt) return;
+
+    try {
+      // 調用 API 更新用戶進度和 XP
+      const response = await fetch(`/api/courses/${courseIdInt}/nodes/${nodeIdInt}/complete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // 更新本地狀態
+        setCompletedNodes(prev => {
+          const newSet = new Set(prev);
+          newSet.add(nodeId);
+          return newSet;
+        });
+        console.log('Node completed:', data);
+        // 重新獲取 tree 數據以確保同步
+        fetchTreeData();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to complete node:', errorData.error || 'Unknown error');
+        // 即使 API 失敗，也更新本地狀態（用於調試）
+        setCompletedNodes(prev => {
+          const newSet = new Set(prev);
+          newSet.add(nodeId);
+          return newSet;
+        });
+      }
+    } catch (error) {
+      console.error('Error completing node:', error);
+      // 即使出錯，也更新本地狀態（用於調試）
+      setCompletedNodes(prev => {
         const newSet = new Set(prev);
         newSet.add(nodeId);
         return newSet;
-    });
+      });
+    }
   };
 
   // 加載狀態
