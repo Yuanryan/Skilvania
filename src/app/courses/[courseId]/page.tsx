@@ -3,6 +3,7 @@ import { Navbar } from '@/components/ui/Navbar';
 import { Play, Share2, GitBranch, Star, ArrowLeft } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { CourseReviews } from '@/components/course/CourseReviews';
 
 interface CourseData {
   id: string;
@@ -111,6 +112,40 @@ async function fetchCourseData(courseId: string): Promise<CourseData | null> {
   }
 }
 
+async function fetchAverageRating(courseId: string): Promise<number> {
+  try {
+    const supabase = createAdminClient();
+    const courseIdInt = parseInt(courseId);
+
+    if (isNaN(courseIdInt)) {
+      return 0;
+    }
+
+    // 獲取所有評分
+    const { data: ratings, error } = await supabase
+      .from('courserating')
+      .select('RatingScore')
+      .eq('CourseID', courseIdInt);
+
+    if (error || !ratings || ratings.length === 0) {
+      return 0;
+    }
+
+    const validRatings = ratings.filter(r => r.RatingScore !== null);
+    if (validRatings.length === 0) {
+      return 0;
+    }
+
+    const sum = validRatings.reduce((acc, r) => acc + (r.RatingScore || 0), 0);
+    const average = sum / validRatings.length;
+    
+    return Math.round(average * 10) / 10; // 保留一位小數
+  } catch (error) {
+    console.error('Error fetching average rating:', error);
+    return 0;
+  }
+}
+
 // 格式化日期
 function formatDate(dateString: string): string {
   try {
@@ -131,6 +166,7 @@ export default async function CourseOverviewPage({ params }: { params: Promise<{
   }
 
   const tags = courseData.tags || [];
+  const averageRating = await fetchAverageRating(courseId);
 
   return (
     <div className="min-h-screen bg-deep-forest flex flex-col">
@@ -152,9 +188,15 @@ export default async function CourseOverviewPage({ params }: { params: Promise<{
                         <span className="px-3 py-1 rounded-full bg-emerald-900/30 text-emerald-400 text-xs font-bold uppercase border border-emerald-800/30">
                             {courseData.status === 'published' ? 'Published Course' : courseData.status === 'draft' ? 'Draft Course' : 'Archived Course'}
                         </span>
-                        <div className="flex items-center gap-1 text-amber-400 text-sm font-bold">
-                            <Star size={14} fill="currentColor" /> 4.8
-                        </div>
+                        {averageRating > 0 ? (
+                            <div className="flex items-center gap-1 text-amber-400 text-sm font-bold">
+                                <Star size={14} fill="currentColor" /> {averageRating.toFixed(1)}
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-1 text-slate-500 text-sm">
+                                <Star size={14} /> 尚無評分
+                            </div>
+                        )}
                     </div>
                     
                     <h1 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
@@ -221,6 +263,9 @@ export default async function CourseOverviewPage({ params }: { params: Promise<{
                     </div>
                 </div>
             </div>
+
+            {/* 評論區塊 */}
+            <CourseReviews courseId={courseId} />
 
         </div>
       </main>
