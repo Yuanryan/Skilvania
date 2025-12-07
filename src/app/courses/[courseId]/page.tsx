@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Navbar } from '@/components/ui/Navbar';
 import { Play, Share2, GitBranch, Star, ArrowLeft } from 'lucide-react';
 import { notFound } from 'next/navigation';
-import { headers } from 'next/headers';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 interface CourseData {
   id: string;
@@ -18,31 +18,93 @@ interface CourseData {
 
 async function fetchCourseData(courseId: string): Promise<CourseData | null> {
   try {
-    // 獲取請求頭以傳遞 cookies
-    const headersList = await headers();
-    const cookie = headersList.get('cookie') || '';
+    const supabase = createAdminClient();
+    const courseIdInt = parseInt(courseId);
 
-    // 構建 API URL
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-                    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-    
-    const response = await fetch(`${baseUrl}/api/courses/${courseId}`, {
-      cache: 'no-store',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(cookie && { Cookie: cookie }),
-      },
-    });
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return null;
-      }
-      throw new Error(`Failed to fetch course: ${response.status}`);
+    if (isNaN(courseIdInt)) {
+      return null;
     }
 
-    const data = await response.json();
-    return data.course;
+    // 獲取課程資訊
+    const { data: course, error: courseError } = await supabase
+      .from('course')
+      .select('*')
+      .eq('CourseID', courseIdInt)
+      .single();
+
+    if (courseError || !course) {
+      return null;
+    }
+
+    // 獲取創建者資訊
+    let author = 'Unknown';
+    try {
+      const { data: creator } = await supabase
+        .from('USER')
+        .select('Username')
+        .eq('UserID', course.CreatorID)
+        .single();
+      
+      if (creator) {
+        author = creator.Username;
+      }
+    } catch (err) {
+      console.error('Error fetching creator:', err);
+    }
+
+    // 獲取標籤
+    const { data: courseTags } = await supabase
+      .from('course_tag')
+      .select('TagID')
+      .eq('CourseID', courseIdInt);
+
+    let tags: string[] = [];
+    if (courseTags && courseTags.length > 0) {
+      const tagIds = courseTags.map(ct => ct.TagID);
+      const { data: tagData } = await supabase
+        .from('tag')
+        .select('Name')
+        .in('TagID', tagIds);
+      
+      if (tagData) {
+        tags = tagData.map(t => t.Name);
+      }
+    }
+
+    // 計算學生數量
+    let studentsCount = 0;
+    try {
+      const { data: nodes } = await supabase
+        .from('node')
+        .select('NodeID')
+        .eq('CourseID', courseIdInt);
+
+      if (nodes && nodes.length > 0) {
+        const nodeIds = nodes.map(n => n.NodeID);
+        const { data: progressData } = await supabase
+          .from('userprogress')
+          .select('UserID')
+          .in('NodeID', nodeIds);
+        
+        if (progressData && progressData.length > 0) {
+          studentsCount = new Set(progressData.map(p => p.UserID)).size;
+        }
+      }
+    } catch (err) {
+      console.error('Error counting students:', err);
+    }
+
+    return {
+      id: course.CourseID.toString(),
+      title: course.Title,
+      description: course.Description,
+      author: author,
+      status: course.Status,
+      totalNodes: course.TotalNodes || 0,
+      tags: tags,
+      students: studentsCount,
+      updatedAt: course.UpdatedAt
+    };
   } catch (error) {
     console.error('Error fetching course:', error);
     return null;
