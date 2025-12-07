@@ -1,5 +1,5 @@
 import { Navbar } from '@/components/ui/Navbar';
-import { User, MapPin, Calendar, Trophy, Flame, GitBranch, Share2 } from 'lucide-react';
+import { User, MapPin, Calendar, Trophy, Flame, GitBranch, Share2, AlertCircle } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { headers } from 'next/headers';
 

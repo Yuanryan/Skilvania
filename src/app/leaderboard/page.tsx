@@ -1,7 +1,6 @@
 import { Navbar } from '@/components/ui/Navbar';
 import { Trophy, Medal, User, ArrowUp, Minus, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-import { headers } from 'next/headers';
 
 interface LeaderboardUser {
   rank: number;
@@ -13,15 +12,12 @@ interface LeaderboardUser {
   isCurrentUser?: boolean;
 }
 
+// 公開排行榜，無需 headers，避免觸發動態渲染限制
 async function fetchLeaderboard(): Promise<LeaderboardUser[]> {
   try {
-    const headersList = await headers();
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     
     const response = await fetch(`${baseUrl}/api/leaderboard`, {
-      headers: {
-        cookie: headersList.get('cookie') || '',
-      },
       cache: 'no-store',
     });
 
@@ -36,6 +32,8 @@ async function fetchLeaderboard(): Promise<LeaderboardUser[]> {
     return [];
   }
 }
+
+export const dynamic = 'force-dynamic';
 
 export default async function LeaderboardPage() {
   const leaderboard = await fetchLeaderboard();
