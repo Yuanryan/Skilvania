@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { Navbar } from '@/components/ui/Navbar';
 import { Play, Share2, GitBranch, Star, ArrowLeft } from 'lucide-react';
 import { notFound } from 'next/navigation';
-import { headers } from 'next/headers';
 
 interface CourseData {
   id: string;
@@ -18,13 +17,8 @@ interface CourseData {
 
 async function fetchCourseData(courseId: string): Promise<CourseData | null> {
   try {
-    const headersList = await headers();
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    
-    const response = await fetch(`${baseUrl}/api/courses/${courseId}`, {
-      headers: {
-        cookie: headersList.get('cookie') || '',
-      },
+    // 使用相對路徑，避免生產環境 BASE_URL 配置問題，RSC 會自動攜帶 cookies
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL ?? ''}/api/courses/${courseId}`, {
       cache: 'no-store',
     });
 
