@@ -15,6 +15,7 @@ interface Course {
   totalNodes: number;
   createdAt?: string;
   updatedAt?: string;
+  tags?: string[];
 }
 
 export default function CoursePreviewPage() {
