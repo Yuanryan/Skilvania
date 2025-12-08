@@ -39,11 +39,11 @@ export default function TreePage() {
       setEdges(data.edges || []);
       setCompletedNodes(new Set(data.completedNodes || []));
       
-      // 自動記錄課程開始活動（只在首次載入時）
+      // 自動記錄課程瀏覽（只在首次載入時）
       if (isFirstLoad) {
         const courseIdNum = parseInt(courseId);
         if (courseIdNum) {
-          logUserActivity('course_start', {
+          logUserActivity('course_view', {
             courseId: courseIdNum,
           }).catch(() => {}); // 靜默失敗，不影響頁面載入
         }
