@@ -65,7 +65,8 @@ export type EventType =
   | 'login'               // 登入
   | 'logout'              // 登出
   | 'register'           // 註冊
-  | 'course_start'        // 開始課程
+  | 'course_start'        // 開始課程（舊事件，保留兼容）
+  | 'course_view'         // 查看課程（新事件）
   | 'course_complete'     // 完成課程
   | 'course_create'       // 創建課程
   | 'course_edit'         // 編輯課程

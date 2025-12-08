@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Sparkles, Layout, Map, User as UserIcon, PlusCircle, LogOut } from "lucide-react";
+import { Sparkles, Layout, Map, User as UserIcon, PlusCircle, LogOut, BarChart3 } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -11,6 +11,7 @@ import { logUserActivity } from "@/lib/utils/activityLogger";
 export function Navbar() {
   const { data: session, status } = useSession();
   const [username, setUsername] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const router = useRouter();
   const loading = status === "loading";
 
@@ -34,7 +35,25 @@ export function Navbar() {
       }
     };
 
+    const checkAdminStatus = async () => {
+      if (session?.user) {
+        try {
+          const response = await fetch('/api/admin/check');
+          if (response.ok) {
+            const data = await response.json();
+            setIsAdmin(data.isAdmin || false);
+          }
+        } catch (error) {
+          console.error("Error checking admin status:", error);
+          setIsAdmin(false);
+        }
+      } else {
+        setIsAdmin(false);
+      }
+    };
+
     fetchUsername();
+    checkAdminStatus();
   }, [session]);
 
   const handleLogout = async () => {
@@ -90,6 +109,14 @@ export function Navbar() {
                 >
                     <PlusCircle size={16} /> Create
                 </Link>
+                {isAdmin && (
+                    <Link 
+                        href="/analytics" 
+                        className="text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-colors"
+                    >
+                        <BarChart3 size={16} /> Analytics
+                    </Link>
+                )}
                 
                 <div className="flex items-center gap-3 pl-4 border-l border-white/10">
                     <Link 
