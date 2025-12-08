@@ -20,9 +20,9 @@ export async function GET(request: NextRequest) {
 
     const db = await getDatabase();
 
-    // 檢查是否為 admin（需先在 admins 集合建立紀錄）
+    // 檢查是否為 admin（改用 Supabase roles/userrole）
     const userId = await getUserIdFromSession(session.user.id);
-    const isAdminUser = await checkIsAdmin(db, userId, session.user.email);
+    const isAdminUser = await checkIsAdmin(userId);
     if (!isAdminUser) {
       return NextResponse.json({ error: 'Forbidden: admin only' }, { status: 403 });
     }
@@ -66,33 +66,35 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 檢查 admin 資格：
-// 1) 檢查 user_permission 集合 (顯式列表)
-// 2) 檢查 users 集合的 Roles 欄位是否包含 'admin'
-// 優先以 userId，比對不到再用 email
-async function checkIsAdmin(db: any, userId: number | null, email?: string | null) {
-  const permissions = db.collection('user_permission');
-  const users = db.collection('users');
+// 檢查 admin 資格：使用 Supabase ROLES / USERROLE
+async function checkIsAdmin(userId: number | null): Promise<boolean> {
+  if (userId === null) return false;
+  const supabase = createAdminClient();
 
-  const filter: any = {
-    $or: [
-      ...(userId ? [{ userId }, { UserID: userId }] : []),
-      ...(email ? [{ email }, { Email: email }] : []),
-    ],
-  };
-  // 若沒有任何查詢條件，直接拒絕
-  if (filter.$or.length === 0) return false;
+  const { data: role, error: roleError } = await supabase
+    .from('roles')
+    .select('RoleID')
+    .eq('RoleName', 'admin')
+    .maybeSingle();
 
-  // 1) 顯式 user_permission 集合
-  const admin = await permissions.findOne(filter);
-  if (admin) return true;
+  if (roleError || !role?.RoleID) {
+    console.error('checkIsAdmin: failed to get admin role', roleError);
+    return false;
+  }
 
-  // 2) users 集合 Roles 欄位包含 'admin'
-  const userDoc = await users.findOne(filter, { projection: { Roles: 1, roles: 1 } });
-  const roles = Array.isArray(userDoc?.Roles) ? userDoc.Roles : Array.isArray(userDoc?.roles) ? userDoc.roles : [];
-  if (roles.includes('admin')) return true;
+  const { data: userRole, error: urError } = await supabase
+    .from('userrole')
+    .select('UserID')
+    .eq('UserID', userId)
+    .eq('RoleID', role.RoleID)
+    .maybeSingle();
 
-  return false;
+  if (urError) {
+    console.error('checkIsAdmin: failed to check userrole', urError);
+    return false;
+  }
+
+  return !!userRole;
 }
 
 // 1. 時間區段分析
