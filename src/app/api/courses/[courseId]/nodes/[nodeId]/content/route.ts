@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth/config';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { mockAPI, shouldUseMock } from '@/lib/mock/creatorData';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
+import { getTypeName, typeNameToNodeType } from '@/lib/supabase/taskType';
 
 // GET /api/courses/[courseId]/nodes/[nodeId]/content - 獲取節點內容
 export async function GET(
@@ -18,7 +19,7 @@ export async function GET(
     // 獲取節點內容和完整信息
     const { data: node, error } = await supabase
       .from('node')
-      .select('Content, Title, XP, Type, Description')
+      .select('Content, Title, XP, TypeID, Description')
       .eq('NodeID', parseInt(nodeId))
       .eq('CourseID', parseInt(courseId))
       .single();
@@ -46,11 +47,15 @@ export async function GET(
       return NextResponse.json({ error: 'Node not found' }, { status: 404 });
     }
 
+    // 獲取類型名稱
+    const typeName = await getTypeName(supabase, node.TypeID);
+    const nodeType = typeNameToNodeType(typeName);
+
     return NextResponse.json({
       content: node.Content || '',
       title: node.Title,
       xp: node.XP || 100,
-      type: node.Type || 'theory',
+      type: nodeType,
       description: node.Description || null
     });
   } catch (error) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
+import { safeNodeComplete, withRetry } from '@/lib/supabase/transactions';
 
 // POST /api/courses/[courseId]/nodes/[nodeId]/complete - 標記節點為完成並更新 XP
 export async function POST(
@@ -48,112 +49,42 @@ export async function POST(
 
     const xpReward = node.XP || 100;
 
-    // 檢查是否已經完成過這個節點
-    const { data: existingProgress } = await supabase
-      .from('userprogress')
-      .select('ProgressID, Status')
+    // 使用安全的事务操作完成节点（带重试机制）
+    const result = await withRetry(
+      () => safeNodeComplete(supabase, userId, nodeIdInt, xpReward),
+      { maxRetries: 3, retryDelay: 50 }
+    );
+
+    if (!result.success) {
+      console.error('Error completing node:', result.error);
+      return NextResponse.json({ 
+        error: 'Failed to complete node',
+        details: result.error?.message 
+      }, { status: 500 });
+    }
+
+    if (result.alreadyCompleted) {
+      return NextResponse.json({
+        success: true,
+        message: 'Node already completed',
+        xpGained: 0,
+        alreadyCompleted: true
+      });
+    }
+
+    // 获取更新后的用户信息
+    const { data: user } = await supabase
+      .from('USER')
+      .select('XP, Level')
       .eq('UserID', userId)
-      .eq('NodeID', nodeIdInt)
       .single();
-
-    let progressId: number;
-    const isNewProgress = !existingProgress;
-
-    if (isNewProgress) {
-      // 創建新的進度記錄
-      const { data: newProgress, error: insertError } = await supabase
-        .from('userprogress')
-        .insert({
-          UserID: userId,
-          NodeID: nodeIdInt,
-          Status: 'completed',
-          CompletedAt: new Date().toISOString(),
-        })
-        .select('ProgressID')
-        .single();
-
-      if (insertError || !newProgress) {
-        console.error('Error creating progress:', insertError);
-        return NextResponse.json({ error: 'Failed to create progress' }, { status: 500 });
-      }
-
-      progressId = newProgress.ProgressID;
-    } else {
-      // 更新現有進度記錄（如果還沒完成）
-      if (existingProgress.Status !== 'completed') {
-        const { error: updateError } = await supabase
-          .from('userprogress')
-          .update({
-            Status: 'completed',
-            CompletedAt: new Date().toISOString(),
-            UpdatedAt: new Date().toISOString(),
-          })
-          .eq('ProgressID', existingProgress.ProgressID);
-
-        if (updateError) {
-          console.error('Error updating progress:', updateError);
-          return NextResponse.json({ error: 'Failed to update progress' }, { status: 500 });
-        }
-      } else {
-        // 已經完成過，不重複獎勵 XP
-        return NextResponse.json({
-          success: true,
-          message: 'Node already completed',
-          xpGained: 0,
-          alreadyCompleted: true
-        });
-      }
-
-      progressId = existingProgress.ProgressID;
-    }
-
-    // 更新用戶 XP（只有在首次完成時才獎勵）
-    if (isNewProgress || existingProgress.Status !== 'completed') {
-      // 獲取當前用戶的 XP
-      const { data: user, error: userError } = await supabase
-        .from('USER')
-        .select('XP, Level')
-        .eq('UserID', userId)
-        .single();
-
-      if (userError || !user) {
-        console.error('Error fetching user:', userError);
-        // 即使獲取用戶失敗，進度已經更新，所以繼續執行
-      } else {
-        const newXP = (user.XP || 0) + xpReward;
-        
-        // 計算新等級（簡單公式：每 500 XP 升一級）
-        const newLevel = Math.floor(newXP / 500) + 1;
-
-        const { error: xpError } = await supabase
-          .from('USER')
-          .update({
-            XP: newXP,
-            Level: newLevel,
-            UpdatedAt: new Date().toISOString(),
-          })
-          .eq('UserID', userId);
-
-        if (xpError) {
-          console.error('Error updating XP:', xpError);
-          // 即使 XP 更新失敗，進度已經更新，所以返回成功但記錄錯誤
-        }
-
-        return NextResponse.json({
-          success: true,
-          message: 'Node completed successfully',
-          xpGained: xpReward,
-          newXP,
-          newLevel,
-          alreadyCompleted: false
-        });
-      }
-    }
 
     return NextResponse.json({
       success: true,
       message: 'Node completed successfully',
-      xpGained: xpReward,
+      xpGained: result.xpGained || 0,
+      newXP: user?.XP,
+      newLevel: user?.Level,
       alreadyCompleted: false
     });
   } catch (error) {

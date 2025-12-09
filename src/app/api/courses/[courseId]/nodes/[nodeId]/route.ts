@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth/config';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { mockAPI, shouldUseMock } from '@/lib/mock/creatorData';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
+import { getOrCreateTypeID, getTypeName, typeNameToNodeType } from '@/lib/supabase/taskType';
 
 // PUT /api/courses/[courseId]/nodes/[nodeId] - 更新節點
 export async function PUT(
@@ -83,7 +84,11 @@ export async function PUT(
     const updates: any = {};
     if (title !== undefined) updates.Title = title.trim();
     if (type !== undefined && ['theory', 'code', 'project'].includes(type)) {
-      updates.Type = type;
+      // 獲取或創建 TypeID
+      const typeID = await getOrCreateTypeID(supabase, type);
+      if (typeID) {
+        updates.TypeID = typeID;
+      }
     }
     if (x !== undefined && typeof x === 'number' && x >= 0 && x <= 800) {
       updates.X = x;
@@ -133,12 +138,16 @@ export async function PUT(
       return NextResponse.json({ error: 'Failed to update node' }, { status: 500 });
     }
 
+    // 獲取類型名稱以返回給前端
+    const typeName = await getTypeName(supabase, node.TypeID);
+    const nodeType = typeNameToNodeType(typeName);
+
     return NextResponse.json({
       node: {
         id: node.NodeID.toString(),
         title: node.Title,
         xp: node.XP,
-        type: node.Type,
+        type: nodeType,
         x: node.X,
         y: node.Y,
         iconName: node.IconName,

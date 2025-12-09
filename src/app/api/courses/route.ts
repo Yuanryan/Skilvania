@@ -170,56 +170,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create course', details: error.message }, { status: 500 });
     }
 
-    // 處理標籤關聯
+    // 處理標籤關聯（使用原子性操作）
     if (tags && Array.isArray(tags) && tags.length > 0) {
-      // 獲取或創建標籤
-      const tagIds: number[] = [];
-      for (const tagName of tags) {
-        if (typeof tagName !== 'string' || !tagName.trim()) continue;
+      const { atomicTagUpdate } = await import('@/lib/supabase/transactions');
+      const { success, error: tagError } = await atomicTagUpdate(
+        supabase,
+        course.CourseID,
+        tags
+      );
 
-        // 檢查標籤是否存在
-        const { data: existingTag } = await supabase
-          .from('tag')
-          .select('TagID')
-          .eq('Name', tagName.trim())
-          .single();
-
-        let tagId: number;
-        if (existingTag) {
-          tagId = existingTag.TagID;
-        } else {
-          // 創建新標籤
-          const { data: newTag, error: tagError } = await supabase
-            .from('tag')
-            .insert({ Name: tagName.trim() })
-            .select('TagID')
-            .single();
-
-          if (tagError || !newTag) {
-            console.error('Error creating tag:', tagError);
-            continue;
-          }
-          tagId = newTag.TagID;
-        }
-
-        tagIds.push(tagId);
-      }
-
-      // 創建課程標籤關聯
-      if (tagIds.length > 0) {
-        const courseTags = tagIds.map(tagId => ({
-          CourseID: course.CourseID,
-          TagID: tagId,
-        }));
-
-        const { error: courseTagError } = await supabase
-          .from('course_tag')
-          .insert(courseTags);
-
-        if (courseTagError) {
-          console.error('Error creating course tags:', courseTagError);
-          // 不中斷流程，標籤創建失敗不影響課程創建
-        }
+      if (!success && tagError) {
+        console.error('Error creating course tags:', tagError);
+        // 不中斷流程，標籤創建失敗不影響課程創建
       }
     }
 

@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { auth } from '@/lib/auth/config';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
 import { Node, Edge } from '@/types';
+import { typeNameToNodeType, getTypeNames } from '@/lib/supabase/taskType';
 
 export async function GET(
   request: NextRequest,
@@ -39,7 +40,7 @@ export async function GET(
     // 獲取節點
     const { data: nodesData, error: nodesError } = await supabase
       .from('node')
-      .select('NodeID, Title, Type, XP, X, Y, IconName, Description')
+      .select('NodeID, Title, TypeID, XP, X, Y, IconName, Description')
       .eq('CourseID', courseIdInt)
       .order('NodeID');
 
@@ -50,6 +51,12 @@ export async function GET(
         { status: 500 }
       );
     }
+
+    // 獲取所有唯一的 TypeID
+    const typeIDs = [...new Set((nodesData || []).map((n: any) => n.TypeID).filter((id: any) => id !== null))];
+    
+    // 批量獲取類型名稱
+    const typeNameMap = await getTypeNames(supabase, typeIDs);
 
     // 獲取邊
     const { data: edgesData, error: edgesError } = await supabase
@@ -105,16 +112,22 @@ export async function GET(
     }
 
     // 轉換節點格式
-    const nodes: Node[] = (nodesData || []).map(node => ({
-      id: node.NodeID.toString(),
-      title: node.Title,
-      type: node.Type as 'theory' | 'code' | 'project',
-      xp: node.XP || 100,
-      x: node.X,
-      y: node.Y,
-      iconName: node.IconName || undefined,
-      description: node.Description || undefined,
-    }));
+    const nodes: Node[] = (nodesData || []).map((node: any) => {
+      // 獲取類型名稱
+      const typeName = node.TypeID ? typeNameMap.get(node.TypeID) : null;
+      const nodeType = typeNameToNodeType(typeName);
+      
+      return {
+        id: node.NodeID.toString(),
+        title: node.Title,
+        type: nodeType,
+        xp: node.XP || 100,
+        x: node.X,
+        y: node.Y,
+        iconName: node.IconName || undefined,
+        description: node.Description || undefined,
+      };
+    });
 
     // 轉換邊格式
     const edges: Edge[] = (edgesData || []).map(edge => ({

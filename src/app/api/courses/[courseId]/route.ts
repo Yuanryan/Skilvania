@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
+import { getTypeNames, typeNameToNodeType } from '@/lib/supabase/taskType';
 
 // GET /api/courses/[courseId] - 獲取單個課程詳情（包含節點和連接）
 export async function GET(
@@ -29,7 +30,7 @@ export async function GET(
     // 獲取節點
     const { data: nodes, error: nodesError } = await supabase
       .from('node')
-      .select('*')
+      .select('NodeID, Title, XP, TypeID, X, Y, IconName, Description, CourseID, CreatedAt')
       .eq('CourseID', parseInt(courseId))
       .order('CreatedAt', { ascending: true });
 
@@ -107,17 +108,26 @@ export async function GET(
       // 繼續執行，使用默認值 0
     }
 
+    // 獲取所有唯一的 TypeID
+    const typeIDs = [...new Set((nodes || []).map((n: any) => n.TypeID).filter((id: any) => id !== null))];
+    const typeNameMap = await getTypeNames(supabase, typeIDs);
+
     // 轉換為前端需要的格式
-    const formattedNodes = (nodes || []).map(node => ({
-      id: node.NodeID.toString(),
-      title: node.Title,
-      xp: node.XP,
-      type: node.Type,
-      x: node.X,
-      y: node.Y,
-      iconName: node.IconName || 'Code',
-      description: node.Description || undefined
-    }));
+    const formattedNodes = (nodes || []).map((node: any) => {
+      const typeName = node.TypeID ? typeNameMap.get(node.TypeID) : null;
+      const nodeType = typeNameToNodeType(typeName);
+      
+      return {
+        id: node.NodeID.toString(),
+        title: node.Title,
+        xp: node.XP,
+        type: nodeType,
+        x: node.X,
+        y: node.Y,
+        iconName: node.IconName || 'Code',
+        description: node.Description || undefined
+      };
+    });
 
     const formattedEdges = (edges || []).map(edge => ({
       id: `e-${edge.EdgeID}`,
@@ -210,64 +220,18 @@ export async function PUT(
       return NextResponse.json({ error: 'Failed to update course' }, { status: 500 });
     }
 
-    // 處理標籤更新
+    // 處理標籤更新（使用原子性操作）
     if (tags !== undefined && Array.isArray(tags)) {
-      // 刪除現有的標籤關聯
-      await supabase
-        .from('course_tag')
-        .delete()
-        .eq('CourseID', parseInt(courseId));
+      const { atomicTagUpdate } = await import('@/lib/supabase/transactions');
+      const { success, error: tagError } = await atomicTagUpdate(
+        supabase,
+        parseInt(courseId),
+        tags
+      );
 
-      // 如果有新標籤，創建新的關聯
-      if (tags.length > 0) {
-        const tagIds: number[] = [];
-        for (const tagName of tags) {
-          if (typeof tagName !== 'string' || !tagName.trim()) continue;
-
-          // 檢查標籤是否存在
-          const { data: existingTag } = await supabase
-            .from('tag')
-            .select('TagID')
-            .eq('Name', tagName.trim())
-            .single();
-
-          let tagId: number;
-          if (existingTag) {
-            tagId = existingTag.TagID;
-          } else {
-            // 創建新標籤
-            const { data: newTag, error: tagError } = await supabase
-              .from('tag')
-              .insert({ Name: tagName.trim() })
-              .select('TagID')
-              .single();
-
-            if (tagError || !newTag) {
-              console.error('Error creating tag:', tagError);
-              continue;
-            }
-            tagId = newTag.TagID;
-          }
-
-          tagIds.push(tagId);
-        }
-
-        // 創建課程標籤關聯
-        if (tagIds.length > 0) {
-          const courseTags = tagIds.map(tagId => ({
-            CourseID: parseInt(courseId),
-            TagID: tagId,
-          }));
-
-          const { error: courseTagError } = await supabase
-            .from('course_tag')
-            .insert(courseTags);
-
-          if (courseTagError) {
-            console.error('Error updating course tags:', courseTagError);
-            // 不中斷流程，標籤更新失敗不影響課程更新
-          }
-        }
+      if (!success && tagError) {
+        console.error('Error updating course tags:', tagError);
+        // 不中斷流程，標籤更新失敗不影響課程更新
       }
     }
 

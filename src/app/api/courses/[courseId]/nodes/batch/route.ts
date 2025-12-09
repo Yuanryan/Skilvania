@@ -72,6 +72,20 @@ export async function PUT(
       return NextResponse.json({ error: 'No valid nodes to update' }, { status: 400 });
     }
 
+    // 先批量獲取所有需要的 TypeID
+    const typeNames = [...new Set(validNodes
+      .filter((n: any) => n.type && ['theory', 'code', 'project'].includes(n.type))
+      .map((n: any) => n.type)
+    )];
+    
+    const typeIdMap = new Map<string, number>();
+    for (const typeName of typeNames) {
+      const typeID = await getOrCreateTypeID(supabase, typeName);
+      if (typeID) {
+        typeIdMap.set(typeName, typeID);
+      }
+    }
+
     // 批量更新節點（支持位置和其他屬性）
     const updatePromises = validNodes.map((node: { 
       nodeId: string; 
@@ -103,7 +117,10 @@ export async function PUT(
       if (node.y !== undefined) updates.Y = Math.round(node.y);
       if (node.title !== undefined) updates.Title = node.title.trim();
       if (node.type !== undefined && ['theory', 'code', 'project'].includes(node.type)) {
-        updates.Type = node.type;
+        const typeID = typeIdMap.get(node.type);
+        if (typeID) {
+          updates.TypeID = typeID;
+        }
       }
       if (node.xp !== undefined && typeof node.xp === 'number' && node.xp >= 0) {
         updates.XP = node.xp;

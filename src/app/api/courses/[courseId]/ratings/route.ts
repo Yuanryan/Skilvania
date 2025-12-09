@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
+import { safeUpsert, withRetry } from '@/lib/supabase/transactions';
 
 // GET /api/courses/[courseId]/ratings - 獲取課程的所有評分和平均評分
 export async function GET(
@@ -127,60 +128,40 @@ export async function POST(
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });
     }
 
-    // 檢查是否已經有評分
-    const { data: existingRating } = await supabase
-      .from('courserating')
-      .select('RatingID')
-      .eq('CourseID', courseIdInt)
-      .eq('UserID', userId)
-      .single();
-
-    if (existingRating) {
-      // 更新現有評分
-      const { data: updatedRating, error: updateError } = await supabase
-        .from('courserating')
-        .update({
-          RatingScore: ratingInt,
-          Comment: comment?.trim() || null,
-          ReviewedAt: new Date().toISOString()
-        })
-        .eq('RatingID', existingRating.RatingID)
-        .select()
-        .single();
-
-      if (updateError) {
-        console.error('Error updating rating:', updateError);
-        return NextResponse.json({ error: 'Failed to update rating' }, { status: 500 });
-      }
-
-      return NextResponse.json({ 
-        message: 'Rating updated successfully',
-        rating: updatedRating 
-      });
-    } else {
-      // 創建新評分
-      const { data: newRating, error: insertError } = await supabase
-        .from('courserating')
-        .insert({
+    // 使用安全的 upsert 操作（防止并发创建重复评分）
+    const { data: rating, error: ratingError } = await withRetry(
+      () => safeUpsert(
+        supabase,
+        'courserating',
+        {
           CourseID: courseIdInt,
           UserID: userId,
           RatingScore: ratingInt,
           Comment: comment?.trim() || null,
           ReviewedAt: new Date().toISOString()
-        })
-        .select()
-        .single();
+        },
+        ['CourseID', 'UserID'], // 唯一键
+        ['RatingScore', 'Comment', 'ReviewedAt'] // 可更新字段
+      ),
+      { maxRetries: 3, retryDelay: 50 }
+    );
 
-      if (insertError) {
-        console.error('Error creating rating:', insertError);
-        return NextResponse.json({ error: 'Failed to create rating' }, { status: 500 });
-      }
-
+    if (ratingError) {
+      console.error('Error creating/updating rating:', ratingError);
       return NextResponse.json({ 
-        message: 'Rating created successfully',
-        rating: newRating 
-      }, { status: 201 });
+        error: 'Failed to save rating',
+        details: ratingError.message 
+      }, { status: 500 });
     }
+
+    // 检查是否是新建还是更新
+    const isNew = !rating?.ReviewedAt || 
+      new Date(rating.ReviewedAt).getTime() === new Date().getTime();
+
+    return NextResponse.json({ 
+      message: isNew ? 'Rating created successfully' : 'Rating updated successfully',
+      rating 
+    }, { status: isNew ? 201 : 200 });
   } catch (error) {
     console.error('Error in POST ratings:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

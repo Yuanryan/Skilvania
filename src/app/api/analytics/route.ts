@@ -101,9 +101,22 @@ async function checkIsAdmin(userId: number | null): Promise<boolean> {
 async function getTimeDistribution(collection: any, timeFilter: any) {
   const pipeline = [
     { $match: { 
-      event: { $in: ['node_view', 'course_view'] },
+      event: { $in: ['node_view', 'course_view', 'course_start'] },
       ...(Object.keys(timeFilter).length > 0 && { timestamp: timeFilter })
     }},
+    {
+      // 將舊的 course_start 事件標準化為 course_view
+      $project: {
+        event: {
+          $cond: [
+            { $eq: ['$event', 'course_start'] },
+            'course_view',
+            '$event'
+          ]
+        },
+        timestamp: 1
+      }
+    },
     {
       $group: {
         _id: { $hour: '$timestamp' },
@@ -128,9 +141,24 @@ async function getCourseDuration(collection: any, timeFilter: any, courseId?: st
   const pipeline = [
     {
       $match: {
-        event: { $in: ['course_view', 'course_complete'] },
+        event: { $in: ['course_view', 'course_start', 'course_complete'] },
         ...(courseId && { courseId: parseInt(courseId) }),
         ...(Object.keys(timeFilter).length > 0 && { timestamp: timeFilter })
+      }
+    },
+    {
+      // 將舊的 course_start 事件標準化為 course_view
+      $project: {
+        event: {
+          $cond: [
+            { $eq: ['$event', 'course_start'] },
+            'course_view',
+            '$event'
+          ]
+        },
+        userId: 1,
+        courseId: 1,
+        timestamp: 1
       }
     },
     {
@@ -233,9 +261,24 @@ async function getCoursePopularity(collection: any, timeFilter: any) {
   const pipeline = [
     {
       $match: {
-        event: { $in: ['course_view', 'course_complete', 'node_view'] },
+        event: { $in: ['course_view', 'course_start', 'course_complete', 'node_view'] },
         courseId: { $exists: true },
         ...(Object.keys(timeFilter).length > 0 && { timestamp: timeFilter })
+      }
+    },
+    {
+      // 將舊的 course_start 事件標準化為 course_view
+      $project: {
+        event: {
+          $cond: [
+            { $eq: ['$event', 'course_start'] },
+            'course_view',
+            '$event'
+          ]
+        },
+        courseId: 1,
+        userId: 1,
+        timestamp: 1
       }
     },
     {
@@ -343,6 +386,20 @@ async function getUserActivity(collection: any, timeFilter: any) {
       }
     },
     {
+      // 將舊的 course_start 事件標準化為 course_view
+      $project: {
+        event: {
+          $cond: [
+            { $eq: ['$event', 'course_start'] },
+            'course_view',
+            '$event'
+          ]
+        },
+        userId: 1,
+        timestamp: 1
+      }
+    },
+    {
       $group: {
         _id: '$event',
         count: { $sum: 1 },
@@ -398,6 +455,20 @@ async function getUserActivity(collection: any, timeFilter: any) {
     {
       $match: {
         ...(Object.keys(timeFilter).length > 0 && { timestamp: timeFilter })
+      }
+    },
+    {
+      // 將舊的 course_start 事件標準化為 course_view
+      $project: {
+        event: {
+          $cond: [
+            { $eq: ['$event', 'course_start'] },
+            'course_view',
+            '$event'
+          ]
+        },
+        userId: 1,
+        timestamp: 1
       }
     },
     {
@@ -457,6 +528,20 @@ async function getOverview(collection: any, timeFilter: any) {
   const eventStats = await collection.aggregate([
     {
       $match: Object.keys(timeFilter).length > 0 ? { timestamp: timeFilter } : {}
+    },
+    {
+      // 將舊的 course_start 事件標準化為 course_view
+      $project: {
+        event: {
+          $cond: [
+            { $eq: ['$event', 'course_start'] },
+            'course_view',
+            '$event'
+          ]
+        },
+        userId: 1,
+        timestamp: 1
+      }
     },
     {
       $group: {

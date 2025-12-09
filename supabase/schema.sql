@@ -9,13 +9,10 @@ CREATE TABLE IF NOT EXISTS ROLES (
 );
 
 -- Insert default roles (only if they don't exist)
+-- Insert default roles (only if they don't exist)
 INSERT INTO ROLES ("RoleID", "RoleName") VALUES
-(1, '愛好者'),  -- Enthusiast
-(2, '設計師'),  -- Designer
-(3, '開發者'),  -- Developer
-(4, '學習者'),  -- Learner
-(5, '教師')    -- Teacher
-ON CONFLICT ("RoleID") DO NOTHING;
+  (1, 'admin'),
+  (2, 'user');
 
 -- =============================================
 -- Table 2: USER (使用者表)

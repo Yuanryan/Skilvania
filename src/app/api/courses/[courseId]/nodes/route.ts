@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { mockAPI, shouldUseMock } from '@/lib/mock/creatorData';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
 import { logActivity } from '@/lib/mongodb/activity';
+import { getOrCreateTypeID, getTypeName, typeNameToNodeType } from '@/lib/supabase/taskType';
 
 // POST /api/courses/[courseId]/nodes - 創建新節點
 export async function POST(
@@ -110,13 +111,19 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // 獲取或創建 TypeID
+    const typeID = await getOrCreateTypeID(supabase, type);
+    if (!typeID) {
+      return NextResponse.json({ error: 'Failed to get or create task type' }, { status: 500 });
+    }
+
     // 創建節點
     const { data: node, error } = await supabase
       .from('node')
       .insert({
         CourseID: parseInt(courseId),
         Title: title.trim(),
-        Type: type,
+        TypeID: typeID,
         X: x,
         Y: y,
         XP: xp || 100,
@@ -166,12 +173,16 @@ export async function POST(
       console.error('❌ Failed to log node_create activity:', err);
     });
 
+    // 獲取類型名稱以返回給前端
+    const typeName = await getTypeName(supabase, node.TypeID);
+    const nodeType = typeNameToNodeType(typeName);
+
     return NextResponse.json({
       node: {
         id: node.NodeID.toString(),
         title: node.Title,
         xp: node.XP,
-        type: node.Type,
+        type: nodeType,
         x: node.X,
         y: node.Y,
         iconName: node.IconName,
