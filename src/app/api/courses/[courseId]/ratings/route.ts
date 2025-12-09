@@ -130,7 +130,14 @@ export async function POST(
 
     // 使用安全的 upsert 操作（防止并发创建重复评分）
     const { data: rating, error: ratingError } = await withRetry(
-      () => safeUpsert(
+      () => safeUpsert<{
+        RatingID: number;
+        CourseID: number;
+        UserID: number;
+        RatingScore: number;
+        Comment: string | null;
+        ReviewedAt: string;
+      }>(
         supabase,
         'courserating',
         {
@@ -154,9 +161,16 @@ export async function POST(
       }, { status: 500 });
     }
 
-    // 检查是否是新建还是更新
-    const isNew = !rating?.ReviewedAt || 
-      new Date(rating.ReviewedAt).getTime() === new Date().getTime();
+    if (!rating) {
+      return NextResponse.json({ 
+        error: 'Failed to save rating' 
+      }, { status: 500 });
+    }
+
+    // 检查是否是新建还是更新（通过检查 ReviewedAt 是否刚刚设置）
+    const now = new Date().getTime();
+    const reviewedAt = new Date(rating.ReviewedAt).getTime();
+    const isNew = Math.abs(now - reviewedAt) < 2000; // 2秒内的认为是新建
 
     return NextResponse.json({ 
       message: isNew ? 'Rating created successfully' : 'Rating updated successfully',

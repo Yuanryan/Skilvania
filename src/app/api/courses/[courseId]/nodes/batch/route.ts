@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth/config';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { mockAPI, shouldUseMock } from '@/lib/mock/creatorData';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
+import { getOrCreateTypeID } from '@/lib/supabase/taskType';
 
 // PUT /api/courses/[courseId]/nodes/batch - 批量更新節點位置
 export async function PUT(
