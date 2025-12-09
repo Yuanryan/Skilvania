@@ -4,6 +4,8 @@ A modern Next.js application for learning and skill development with Supabase au
 
 **👉 Live Application:** [https://skilvania.vercel.app/](https://skilvania.vercel.app/)
 
+**資料庫備份檔**:backup.dump
+
 ## Tech Stack
 
 - **Framework**: Next.js 16 with React 19
