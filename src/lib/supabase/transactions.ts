@@ -191,25 +191,68 @@ export async function atomicTagUpdate(
       return { success: false, error: deleteError };
     }
     
-    // 2. 获取或创建标签
+    // 2. 获取或创建标签（tag 表没有 UpdatedAt 字段，需要特殊处理）
+    // 标签可以被多个课程重复使用，所以先查找是否存在
     const tagIds: number[] = [];
     for (const tagName of tagNames) {
       if (!tagName || typeof tagName !== 'string' || !tagName.trim()) continue;
       
-      // 使用 upsert 确保标签唯一
-      const { data: tag, error: tagError } = await safeUpsert<{ TagID: number; Name: string }>(
-        supabase,
-        'tag',
-        { Name: tagName.trim() },
-        'Name'
-      );
+      const trimmedName = tagName.trim();
+      let tagId: number | null = null;
       
-      if (tagError || !tag) {
-        console.error('Error creating/finding tag:', tagError);
-        continue;
+      // 先查找是否已存在（标签名称是唯一的，可以被多个课程重复使用）
+      const { data: existingTag, error: findError } = await supabase
+        .from('tag')
+        .select('TagID')
+        .eq('Name', trimmedName)
+        .maybeSingle();
+      
+      if (existingTag) {
+        // 标签已存在，直接使用（标签可以被重复使用）
+        tagId = existingTag.TagID;
+      } else if (!findError || findError.code === 'PGRST116') {
+        // 标签不存在，尝试创建新标签
+        const { data: newTag, error: insertError } = await supabase
+          .from('tag')
+          .insert({ Name: trimmedName })
+          .select('TagID')
+          .single();
+        
+        if (insertError) {
+          // 如果是主键冲突（序列问题），立即重新查找
+          if (insertError.code === '23505') {
+            console.warn(`Tag 序列冲突，重新查找标签: "${trimmedName}"`);
+            
+            // 立即重新查找（序列冲突意味着标签可能已存在，只是序列值不同步）
+            const { data: retryTag } = await supabase
+              .from('tag')
+              .select('TagID')
+              .eq('Name', trimmedName)
+              .maybeSingle();
+            
+            if (retryTag) {
+              tagId = retryTag.TagID;
+              console.log(`找到现有标签: "${trimmedName}" (TagID: ${tagId})`);
+            } else {
+              console.error(`无法创建或找到标签 "${trimmedName}"。请执行 supabase/fix_tag_sequence.sql 修复序列`);
+            }
+          } else {
+            // 其他插入错误
+            console.error('Error creating tag:', insertError);
+          }
+        } else if (newTag) {
+          tagId = newTag.TagID;
+        }
+      } else {
+        // 其他查找错误
+        console.error('Error finding tag:', findError);
       }
       
-      tagIds.push(tag.TagID);
+      if (tagId) {
+        tagIds.push(tagId);
+      } else {
+        console.warn(`Skipping tag "${trimmedName}" - could not create or find`);
+      }
     }
     
     // 3. 插入新的标签关联
