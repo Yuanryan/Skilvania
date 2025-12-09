@@ -2,6 +2,8 @@
 
 A modern Next.js application for learning and skill development with Supabase authentication.
 
+**👉 Live Application:** [https://skilvania.vercel.app/](https://skilvania.vercel.app/)
+
 ## Tech Stack
 
 - **Framework**: Next.js 16 with React 19
