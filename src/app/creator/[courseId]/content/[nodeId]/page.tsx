@@ -8,7 +8,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
-import { parseContent, stringifyBlocks, markdownToBlocks, isBlockFormat } from '@/types/content';
+import { parseContent, markdownToBlocks, isBlockFormat } from '@/types/content';
 import { ContentBlock } from '@/types/content';
 import BlockEditor from '@/components/content/BlockEditor';
 import BlockRenderer from '@/lib/content/blockRenderer';

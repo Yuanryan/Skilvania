@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { MessageCircle, Loader2, AlertCircle, Send, ArrowLeft } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import { useSearchParams } from 'next/navigation';
@@ -38,7 +38,7 @@ interface ChatData {
   remainingIntroMessages: number | null;
 }
 
-export default function MessagesPage() {
+function MessagesPageContent() {
   const searchParams = useSearchParams();
   const initialUserId = searchParams.get('userId');
 
@@ -389,6 +389,21 @@ export default function MessagesPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function MessagesPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-deep-forest flex flex-col">
+        <Navbar />
+        <main className="flex-1 max-w-7xl mx-auto w-full flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+        </main>
+      </div>
+    }>
+      <MessagesPageContent />
+    </Suspense>
   );
 }
 
