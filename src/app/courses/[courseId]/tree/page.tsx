@@ -163,6 +163,7 @@ export default function TreePage() {
             completedNodes={completedNodes}
             isCreatorMode={false}
             onNodeClick={setSelectedNode}
+            onBackgroundClick={() => setSelectedNode(null)}
             scale={selectedNode ? Math.max(0.5, 1 - (drawerWidth / 150)) : 1}
             disableTransition={isResizing}
           />

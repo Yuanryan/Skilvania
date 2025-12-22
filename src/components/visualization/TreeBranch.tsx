@@ -31,20 +31,36 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
   const thickness = 4 + (normalizeY * 10); 
 
   const delay = getDelay(start.y);
-  const length = 500; 
+  const length = 3000; 
 
   // In Creator Mode, we want solid lines that update instantly, no fancy growth animation
   if (isCreatorMode) {
+    // Use the completed palette for creator mode to mirror finished-state styling
     return (
-      <path 
-        d={path} 
-        stroke="#475569" 
-        strokeWidth={thickness} 
-        strokeLinecap="round" 
-        fill="none" 
-        className="opacity-50"
-        markerEnd="url(#arrowhead)"
-      />
+      <g>
+        
+        <path 
+          d={path} 
+          stroke="#10b981" 
+          strokeWidth={thickness} 
+          strokeLinecap="round" 
+          fill="none" 
+          className="opacity-80"
+        />
+        {/* The "Flow Pulse" for Creator Mode - Shows direction without growth animation */}
+        <path 
+          d={path} 
+          stroke="#a7f3d0" 
+          strokeWidth={thickness * 0.6} 
+          strokeLinecap="round" 
+          fill="none" 
+          style={{
+             strokeDasharray: `100 1400`, 
+             animation: `growBranch 3.5s linear infinite`,
+          }}
+          className="opacity-40 blur-[1px] mix-blend-plus-lighter"
+        />
+      </g>
     );
   }
 
@@ -56,14 +72,14 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
         d={path} 
         stroke="#3f3c35" 
         strokeWidth={thickness} 
-        strokeLinecap="round"
+        strokeLinecap="round" 
         fill="none" 
         filter="url(#roughness-global)" 
         className="opacity-90"
         style={{
           strokeDasharray: length,
           strokeDashoffset: length,
-          animation: `growBranch 2s ease-out forwards`,
+          animation: `growBranch 10s ease-out forwards`,
           animationDelay: `${delay}s`,
         }}
       />
@@ -74,15 +90,33 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
           d={path} 
           stroke={status === 'completed' ? "#10b981" : "#059669"} 
           strokeWidth={thickness / 2.5} 
-          strokeLinecap="round"
+          strokeLinecap="round" 
           fill="none" 
           style={{
              strokeDasharray: length,
              strokeDashoffset: length,
-             animation: `growBranch 2s ease-out forwards`,
+             animation: `growBranch 10s ease-out forwards`,
              animationDelay: `${delay}s`
           }}
           className="opacity-80 mix-blend-screen"
+        />
+      )}
+
+      {/* The "Flow Pulse" - Shows direction */}
+      {(status === 'completed' || status === 'unlocked') && (
+        <path 
+          d={path} 
+          stroke="#a7f3d0" 
+          strokeWidth={thickness * 0.6} 
+          strokeLinecap="round" 
+          fill="none" 
+          style={{
+             strokeDasharray: `100 1400`, 
+             animation: `growBranch 3.5s linear infinite, fade-in-pulse 0.1s forwards`,
+             animationDelay: `calc(${delay}s)`, // Wait for growth animation (10s) to finish
+             opacity: 0, // Initially hidden
+          }}
+          className="blur-[1px] mix-blend-plus-lighter"
         />
       )}
     </g>

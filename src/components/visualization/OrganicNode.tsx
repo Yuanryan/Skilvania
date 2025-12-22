@@ -37,7 +37,8 @@ export const OrganicNode: React.FC<OrganicNodeProps> = ({
     locked: "bg-slate-900/80 border-slate-700 text-slate-600 scale-90 grayscale",
     unlocked: "bg-slate-900 border-emerald-500 text-emerald-400 shadow-[0_0_30px_rgba(16,185,129,0.3)] animate-pulse hover:scale-110 cursor-pointer",
     completed: "bg-emerald-900 border-emerald-400 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:scale-110 cursor-pointer",
-    creator: "bg-slate-800 border-slate-500 text-slate-300 hover:border-white cursor-move hover:shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+    // Creator mode: match completed palette for a consistent look while editing
+    creator: "bg-emerald-900 border-emerald-400 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)] cursor-move hover:shadow-[0_0_25px_rgba(16,185,129,0.45)]"
   };
 
   let currentStyle = statusStyles[status] || statusStyles.locked;
