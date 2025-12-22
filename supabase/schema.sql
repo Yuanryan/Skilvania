@@ -1,156 +1,122 @@
--- Database schema for 興趣技能樹 (Interest Skill Tree) based on data dictionary
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
 
--- =============================================
--- Table 1: ROLES (角色表)
--- =============================================
-CREATE TABLE IF NOT EXISTS ROLES (
-    "RoleID" INT PRIMARY KEY,
-    "RoleName" VARCHAR(50) NOT NULL
+CREATE TABLE public.USER (
+  UserID integer NOT NULL DEFAULT nextval('"USER_UserID_seq"'::regclass),
+  Username character varying NOT NULL UNIQUE,
+  Email character varying NOT NULL,
+  XP integer DEFAULT 0 CHECK ("XP" >= 0),
+  Level integer DEFAULT 1 CHECK ("Level" >= 1),
+  CreatedAt timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  UpdatedAt timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  Password character varying,
+  CONSTRAINT USER_pkey PRIMARY KEY (UserID)
 );
-
--- Insert default roles (only if they don't exist)
--- Insert default roles (only if they don't exist)
-INSERT INTO ROLES ("RoleID", "RoleName") VALUES
-  (1, 'admin'),
-  (2, 'user');
-
--- =============================================
--- Table 2: USER (使用者表)
--- =============================================
-CREATE TABLE IF NOT EXISTS "USER" (
-    "UserID" SERIAL PRIMARY KEY,
-    "Username" VARCHAR(100) NOT NULL UNIQUE,
-    "Email" VARCHAR(150) NOT NULL UNIQUE,
-    "Password" VARCHAR(255),
-    "XP" INT DEFAULT 0 CHECK ("XP" >= 0),
-    "Level" INT DEFAULT 1 CHECK ("Level" >= 1),
-    "CreatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    "UpdatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE public.achievement (
+  AchievementID integer NOT NULL DEFAULT nextval('"achievement_AchievementID_seq"'::regclass),
+  Name character varying NOT NULL,
+  Description text,
+  CriteriaType character varying,
+  CONSTRAINT achievement_pkey PRIMARY KEY (AchievementID)
 );
-
--- =============================================
--- Table 3: USERROLE (使用者角色關聯表)
--- =============================================
-CREATE TABLE IF NOT EXISTS USERROLE (
-    "UserID" INT NOT NULL,
-    "RoleID" INT NOT NULL,
-    PRIMARY KEY ("UserID", "RoleID"),
-    FOREIGN KEY ("UserID") REFERENCES "USER"("UserID") ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY ("RoleID") REFERENCES ROLES("RoleID") ON DELETE CASCADE ON UPDATE CASCADE
+CREATE TABLE public.course (
+  CourseID integer NOT NULL DEFAULT nextval('"course_CourseID_seq"'::regclass),
+  Title character varying NOT NULL,
+  Description text,
+  CreatorID integer NOT NULL,
+  Status character varying DEFAULT 'draft'::character varying CHECK ("Status"::text = ANY (ARRAY['draft'::character varying, 'published'::character varying, 'archived'::character varying]::text[])),
+  TotalNodes integer DEFAULT 0 CHECK ("TotalNodes" >= 0),
+  CreatedAt timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  UpdatedAt timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT course_pkey PRIMARY KEY (CourseID),
+  CONSTRAINT course_CreatorID_fkey FOREIGN KEY (CreatorID) REFERENCES public.USER(UserID)
 );
-
--- =============================================
--- Supabase Auth Integration
--- =============================================
--- Create a bridge table for Supabase Auth users
-CREATE TABLE IF NOT EXISTS auth_user_bridge (
-    auth_user_id UUID REFERENCES auth.users(id) PRIMARY KEY,
-    user_id INT REFERENCES "USER"("UserID"),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE public.course_tag (
+  CourseID integer NOT NULL,
+  TagID integer NOT NULL,
+  CONSTRAINT course_tag_pkey PRIMARY KEY (CourseID, TagID),
+  CONSTRAINT course_tag_CourseID_fkey FOREIGN KEY (CourseID) REFERENCES public.course(CourseID),
+  CONSTRAINT course_tag_TagID_fkey FOREIGN KEY (TagID) REFERENCES public.tag(TagID)
 );
-
--- Function to automatically create USER record when auth user signs up
-CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
-RETURNS TRIGGER AS $$
-DECLARE
-    new_user_id INT;
-    user_username TEXT;
-BEGIN
-    -- Get username from metadata, fallback to generated username
-    user_username := COALESCE(NEW.raw_user_meta_data->>'username', 'user_' || substr(NEW.id::text, 1, 8));
-
-    -- Check if username already exists (shouldn't happen due to client-side check, but safety measure)
-    IF EXISTS (SELECT 1 FROM "USER" WHERE "Username" = user_username) THEN
-        -- Generate a unique username if conflict exists
-        user_username := user_username || '_' || substr(NEW.id::text, 1, 4);
-    END IF;
-
-    -- Create USER record
-    INSERT INTO "USER" ("Username", "Email")
-    VALUES (user_username, NEW.email)
-    RETURNING "UserID" INTO new_user_id;
-
-    -- Create bridge record
-    INSERT INTO auth_user_bridge (auth_user_id, user_id)
-    VALUES (NEW.id, new_user_id);
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Drop existing trigger if it exists
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-
--- Trigger for new auth users
-CREATE TRIGGER on_auth_user_created
-    AFTER INSERT ON auth.users
-    FOR EACH ROW EXECUTE FUNCTION public.handle_new_auth_user();
-
--- =============================================
--- Row Level Security (RLS)
--- =============================================
-ALTER TABLE "USER" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE USERROLE ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ROLES ENABLE ROW LEVEL SECURITY;
-
--- Drop existing policies if they exist
-DROP POLICY IF EXISTS "Roles are viewable by everyone" ON ROLES;
-DROP POLICY IF EXISTS "Users can view all users" ON "USER";
-DROP POLICY IF EXISTS "Users can update their own data" ON "USER";
-DROP POLICY IF EXISTS "Users can view all user roles" ON USERROLE;
-DROP POLICY IF EXISTS "Users can manage their own roles" ON USERROLE;
-
--- ROLES table policies (read-only for everyone)
-CREATE POLICY "Roles are viewable by everyone" ON ROLES
-    FOR SELECT USING (true);
-
--- USER table policies
-CREATE POLICY "Users can view all users" ON "USER"
-    FOR SELECT USING (true);
-
-CREATE POLICY "Users can update their own data" ON "USER"
-    FOR UPDATE USING (
-        "UserID" IN (
-            SELECT user_id FROM auth_user_bridge
-            WHERE auth_user_id = auth.uid()
-        )
-    );
-
--- USERROLE table policies
-CREATE POLICY "Users can view all user roles" ON USERROLE
-    FOR SELECT USING (true);
-
-CREATE POLICY "Users can manage their own roles" ON USERROLE
-    FOR ALL USING (
-        "UserID" IN (
-            SELECT user_id FROM auth_user_bridge
-            WHERE auth_user_id = auth.uid()
-        )
-    );
-
--- =============================================
--- Indexes for Performance
--- =============================================
-CREATE INDEX IF NOT EXISTS idx_user_username ON "USER"("Username");
-CREATE INDEX IF NOT EXISTS idx_user_email ON "USER"("Email");
-CREATE INDEX IF NOT EXISTS idx_userrole_userid ON USERROLE("UserID");
-CREATE INDEX IF NOT EXISTS idx_userrole_roleid ON USERROLE("RoleID");
-CREATE INDEX IF NOT EXISTS idx_auth_bridge_auth_user ON auth_user_bridge(auth_user_id);
-CREATE INDEX IF NOT EXISTS idx_auth_bridge_user ON auth_user_bridge(user_id);
-
--- =============================================
--- Comments for Documentation
--- =============================================
-COMMENT ON TABLE ROLES IS '角色表 - Stores user roles like enthusiast, designer, etc.';
-COMMENT ON TABLE "USER" IS '使用者表 - Main user table with XP and level information';
-COMMENT ON TABLE USERROLE IS '使用者角色關聯表 - Junction table for user-role many-to-many relationship';
-COMMENT ON TABLE auth_user_bridge IS '橋接表 - Bridges Supabase auth.users with custom USER table';
-
-COMMENT ON COLUMN ROLES."RoleID" IS '角色代號 - Primary key for roles';
-COMMENT ON COLUMN ROLES."RoleName" IS '角色名稱 - Role name (enthusiast, designer, etc.)';
-
-COMMENT ON COLUMN "USER"."UserID" IS '使用者代號 - Primary key for users';
-COMMENT ON COLUMN "USER"."Username" IS '使用者名稱 - Unique username';
-COMMENT ON COLUMN "USER"."Email" IS '電子郵件 - Unique email address';
-COMMENT ON COLUMN "USER"."XP" IS '經驗值 - Experience points (≥0)';
-COMMENT ON COLUMN "USER"."Level" IS '等級 - User level (≥1)';
+CREATE TABLE public.courserating (
+  RatingID integer NOT NULL DEFAULT nextval('"courserating_RatingID_seq"'::regclass),
+  CourseID integer NOT NULL,
+  UserID integer NOT NULL,
+  RatingScore integer CHECK ("RatingScore" >= 1 AND "RatingScore" <= 5),
+  Comment text,
+  ReviewedAt timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT courserating_pkey PRIMARY KEY (RatingID),
+  CONSTRAINT courserating_UserID_fkey FOREIGN KEY (UserID) REFERENCES public.USER(UserID),
+  CONSTRAINT courserating_CourseID_fkey FOREIGN KEY (CourseID) REFERENCES public.course(CourseID)
+);
+CREATE TABLE public.edge (
+  EdgeID integer NOT NULL DEFAULT nextval('"edge_EdgeID_seq"'::regclass),
+  CourseID integer NOT NULL,
+  FromNodeID integer NOT NULL,
+  ToNodeID integer NOT NULL,
+  CreatedAt timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT edge_pkey PRIMARY KEY (EdgeID),
+  CONSTRAINT edge_CourseID_fkey FOREIGN KEY (CourseID) REFERENCES public.course(CourseID),
+  CONSTRAINT edge_FromNodeID_fkey FOREIGN KEY (FromNodeID) REFERENCES public.node(NodeID),
+  CONSTRAINT edge_ToNodeID_fkey FOREIGN KEY (ToNodeID) REFERENCES public.node(NodeID)
+);
+CREATE TABLE public.node (
+  NodeID integer NOT NULL DEFAULT nextval('"node_NodeID_seq"'::regclass),
+  CourseID integer NOT NULL,
+  Title character varying NOT NULL,
+  XP integer DEFAULT 100 CHECK ("XP" >= 0),
+  X integer NOT NULL CHECK ("X" >= 0 AND "X" <= 800),
+  Y integer NOT NULL CHECK ("Y" >= 0 AND "Y" <= 800),
+  IconName character varying,
+  Description text,
+  Content text,
+  CreatedAt timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  UpdatedAt timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  TypeID integer,
+  CONSTRAINT node_pkey PRIMARY KEY (NodeID),
+  CONSTRAINT node_CourseID_fkey FOREIGN KEY (CourseID) REFERENCES public.course(CourseID),
+  CONSTRAINT fk_node_type FOREIGN KEY (TypeID) REFERENCES public.tasktype(TypeID)
+);
+CREATE TABLE public.roles (
+  RoleID integer NOT NULL,
+  RoleName character varying NOT NULL,
+  CONSTRAINT roles_pkey PRIMARY KEY (RoleID)
+);
+CREATE TABLE public.tag (
+  TagID integer NOT NULL DEFAULT nextval('"tag_TagID_seq"'::regclass),
+  Name character varying NOT NULL UNIQUE,
+  CreatedAt timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT tag_pkey PRIMARY KEY (TagID)
+);
+CREATE TABLE public.tasktype (
+  TypeID integer NOT NULL DEFAULT nextval('"tasktype_TypeID_seq"'::regclass),
+  TypeName text NOT NULL,
+  CONSTRAINT tasktype_pkey PRIMARY KEY (TypeID)
+);
+CREATE TABLE public.userachievement (
+  AchievementID integer NOT NULL,
+  UserID integer NOT NULL,
+  Date timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT userachievement_pkey PRIMARY KEY (AchievementID, UserID),
+  CONSTRAINT userachievement_AchievementID_fkey FOREIGN KEY (AchievementID) REFERENCES public.achievement(AchievementID),
+  CONSTRAINT userachievement_UserID_fkey FOREIGN KEY (UserID) REFERENCES public.USER(UserID)
+);
+CREATE TABLE public.userprogress (
+  ProgressID integer NOT NULL DEFAULT nextval('"userprogress_ProgressID_seq"'::regclass),
+  UserID integer NOT NULL,
+  NodeID integer NOT NULL,
+  Status character varying DEFAULT 'locked'::character varying CHECK ("Status"::text = ANY (ARRAY['locked'::character varying, 'unlocked'::character varying, 'completed'::character varying]::text[])),
+  CompletedAt timestamp with time zone,
+  CreatedAt timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  UpdatedAt timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT userprogress_pkey PRIMARY KEY (ProgressID),
+  CONSTRAINT userprogress_NodeID_fkey FOREIGN KEY (NodeID) REFERENCES public.node(NodeID),
+  CONSTRAINT userprogress_UserID_fkey FOREIGN KEY (UserID) REFERENCES public.USER(UserID)
+);
+CREATE TABLE public.userrole (
+  UserID integer NOT NULL,
+  RoleID integer NOT NULL,
+  CONSTRAINT userrole_pkey PRIMARY KEY (UserID, RoleID),
+  CONSTRAINT userrole_UserID_fkey FOREIGN KEY (UserID) REFERENCES public.USER(UserID),
+  CONSTRAINT userrole_RoleID_fkey FOREIGN KEY (RoleID) REFERENCES public.roles(RoleID)
+);

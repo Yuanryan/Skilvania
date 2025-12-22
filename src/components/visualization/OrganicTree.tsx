@@ -14,6 +14,8 @@ interface OrganicTreeProps {
   onNodeClick: (node: Node) => void;
   onNodeDrag?: (nodeId: string, x: number, y: number) => void;
   onConnect?: (sourceId: string, targetId: string) => void;
+  scale?: number;
+  disableTransition?: boolean;
 }
 
 export const OrganicTree: React.FC<OrganicTreeProps> = ({
@@ -23,7 +25,9 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   isCreatorMode,
   onNodeClick,
   onNodeDrag,
-  onConnect
+  onConnect,
+  scale = 1,
+  disableTransition = false
 }) => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -37,6 +41,10 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   const canvasRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
+  
+  // 記錄 mousedown 時的滑鼠位置，用於區分點擊和拖曳
+  const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
+  const DRAG_THRESHOLD = 5; // 移動超過 5px 才視為拖曳
 
   // --- NODE STATUS LOGIC ---
   const getNodeStatus = (nodeId: string): NodeStatus => {
@@ -55,6 +63,9 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   const handleNodeMouseDown = (e: React.MouseEvent, node: Node) => {
     if (!isCreatorMode) return;
     e.stopPropagation();
+    
+    // 記錄 mousedown 時的滑鼠位置
+    mouseDownPosRef.current = { x: e.clientX, y: e.clientY };
     setDraggingId(node.id);
     isDraggingRef.current = false;
   };
@@ -73,6 +84,18 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
     // 1. Handle Node Dragging (Creator Mode)
     if (draggingId && canvasRef.current && onNodeDrag) {
+      // 檢查是否真的在拖曳（移動距離超過閾值）
+      if (mouseDownPosRef.current) {
+        const dx = e.clientX - mouseDownPosRef.current.x;
+        const dy = e.clientY - mouseDownPosRef.current.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // 只有移動距離超過閾值才視為拖曳
+        if (distance < DRAG_THRESHOLD) {
+          return; // 移動距離太小，不視為拖曳
+        }
+      }
+      
       isDraggingRef.current = true;
       
       // Get container and canvas positions
@@ -86,9 +109,9 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
       const relativeX = (e.clientX - containerRect.left - containerCenterX - pan.x) / zoom;
       const relativeY = (e.clientY - containerRect.top - containerCenterY - pan.y) / zoom;
       
-      // Convert to SVG coordinates (0-800 range), SVG is centered at (0,0) in canvas space
-      const x = Math.max(0, Math.min(800, relativeX + 400));
-      const y = Math.max(0, Math.min(800, relativeY + 400));
+      // Convert to SVG coordinates (0-1600 range), SVG is centered at (0,0) in canvas space
+      const x = Math.max(0, Math.min(1600, relativeX + 800));
+      const y = Math.max(0, Math.min(1600, relativeY + 800));
   
       onNodeDrag(draggingId, x, y);
       return;
@@ -110,6 +133,8 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   };
 
   const handleCanvasMouseUp = () => {
+    // 重置拖曳相關狀態
+    mouseDownPosRef.current = null;
     setDraggingId(null);
     setIsPanning(false);
   };
@@ -208,73 +233,97 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
         </defs>
       </svg>
 
-      {/* Canvas Container - Larger than viewport to allow scrolling */}
-      <div 
-         className="absolute top-1/2 left-1/2 origin-center will-change-transform" 
-         ref={canvasRef}
-         style={{ 
-           // Use a fixed large size (e.g., 4000px) instead of vw/vh 
-           // to ensure calculations are consistent across devices.
-           width: '4000px',
-           height: '4000px',
-           
-           // Offset by half the width/height to center the coordinate system 0,0 
-           // exactly in the middle of the screen.
-           marginLeft: '-2000px',
-           marginTop: '-2000px',
-           
-           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-         }}
-      >
-        {/* SVG Container - Centered within the large canvas */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px]">
-          <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid meet">
-            
-            {/* Root Base Visualization */}
-            <path 
-              d="M 360 780 Q 400 750 440 780" 
-              stroke="#3f3c35" 
-              strokeWidth="16" 
-              strokeLinecap="round" 
-              fill="none" 
-              className="opacity-80" 
-              filter="url(#roughness-global)"
-            />
+      {/* 
+        1. ROOT WRAPPER: 
+        Positioned at screen center. We give it a small size so it has a valid 'center' point.
+      */}
+      <div className="absolute top-1/2 left-1/2 w-1 h-1">
+        
+        {/* 
+          2. EXTERNAL SCALE LAYER: 
+          Handles the smooth "zoom to node" transitions. 
+          We make it 4000px wide so the 'origin-center' is stable.
+        */}
+        <div 
+          className={`absolute origin-center will-change-transform ${disableTransition ? '' : 'transition-transform duration-500 '}`}
+          style={{ 
+            width: '4000px',
+            height: '4000px',
+            left: '-2000px', // Perfectly centers the 4000px box on the screen
+            top: '-2000px',
+            transform: `scale(${scale})` 
+          }}
+        >
+          {/* 
+            3. INTERNAL PAN/ZOOM LAYER: 
+            Handles user interaction (drag and scroll zoom).
+          */}
+          <div 
+            className="w-full h-full origin-center will-change-transform" 
+            ref={canvasRef}
+            style={{ 
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            }}
+          >
+            {/* 
+              4. CONTENT CONTAINER: 
+              Exactly centered inside the 4000px canvas.
+            */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1600px] h-[1600px]">
+              <svg 
+                className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" 
+                viewBox="0 0 1600 1600" 
+                preserveAspectRatio="xMidYMid meet"
+              >
+                <defs>
+                  <marker
+                    id="arrowhead"
+                    markerWidth="12"
+                    markerHeight="12"
+                    refX="48"
+                    refY="6"
+                    orient="auto"
+                    markerUnits="userSpaceOnUse"
+                  >
+                    <path d="M0,2 L12,6 L0,10" fill="#475569" />
+                  </marker>
+                </defs>
+                {edges.map((edge) => {
+                  const startNode = nodes.find(n => n.id === edge.from);
+                  const endNode = nodes.find(n => n.id === edge.to);
+                  if (!startNode || !endNode) return null;
 
-            {edges.map((edge) => {
-              const startNode = nodes.find(n => n.id === edge.from);
-              const endNode = nodes.find(n => n.id === edge.to);
-              if (!startNode || !endNode) return null;
+                  let status: 'locked' | 'unlocked' | 'completed' = 'locked';
+                  if (completedNodes.has(edge.from) && completedNodes.has(edge.to)) status = 'completed';
+                  else if (completedNodes.has(edge.from)) status = 'unlocked';
 
-              let status: 'locked' | 'unlocked' | 'completed' = 'locked';
-              if (completedNodes.has(edge.from) && completedNodes.has(edge.to)) status = 'completed';
-              else if (completedNodes.has(edge.from)) status = 'unlocked';
+                  return (
+                    <TreeBranch 
+                      key={edge.id} 
+                      start={startNode} 
+                      end={endNode} 
+                      status={status} 
+                      isCreatorMode={isCreatorMode} 
+                    />
+                  );
+                })}
+              </svg>
 
-              return (
-                <TreeBranch 
-                  key={edge.id} 
-                  start={startNode} 
-                  end={endNode} 
-                  status={status} 
-                  isCreatorMode={isCreatorMode} 
-                />
-              );
-            })}
-          </svg>
-
-          {/* Nodes Container - Positioned relative to SVG (800x800px) */}
-          <div className="absolute inset-0 w-[800px] h-[800px]">
-            {nodes.map(node => (
-              <OrganicNode 
-                key={node.id} 
-                node={node} 
-                status={getNodeStatus(node.id)} 
-                isSelected={selectedNodeId === node.id || (isCreatorMode && draggingId === node.id)}
-                isCreatorMode={isCreatorMode}
-                onMouseDown={handleNodeMouseDown}
-                onClick={handleNodeClick}
-              />
-            ))}
+              {/* Nodes Container */}
+              <div className="absolute inset-0 w-[1600px] h-[1600px]">
+                {nodes.map(node => (
+                  <OrganicNode 
+                    key={node.id} 
+                    node={node} 
+                    status={getNodeStatus(node.id)} 
+                    isSelected={selectedNodeId === node.id || (isCreatorMode && draggingId === node.id)}
+                    isCreatorMode={isCreatorMode}
+                    onMouseDown={handleNodeMouseDown}
+                    onClick={handleNodeClick}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>

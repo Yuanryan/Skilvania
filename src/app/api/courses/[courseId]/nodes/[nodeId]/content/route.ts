@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { mockAPI, shouldUseMock } from '@/lib/mock/creatorData';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
 import { getTypeName, typeNameToNodeType } from '@/lib/supabase/taskType';
+import { stringifyBlocks, validateBlocks } from '@/lib/content/blockParser';
+import { ContentBlock } from '@/types/content';
 
 // GET /api/courses/[courseId]/nodes/[nodeId]/content - 獲取節點內容
 export async function GET(
@@ -77,10 +79,30 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { content } = body;
+    const { content, blocks } = body;
 
-    if (typeof content !== 'string') {
-      return NextResponse.json({ error: 'Content must be a string' }, { status: 400 });
+    // 支援兩種格式：content (字串) 或 blocks (陣列)
+    let contentToSave: string;
+    
+    if (blocks !== undefined) {
+      // 如果提供了 blocks，驗證並轉換為字串
+      if (!Array.isArray(blocks)) {
+        return NextResponse.json({ error: 'Blocks must be an array' }, { status: 400 });
+      }
+      
+      if (!validateBlocks(blocks)) {
+        return NextResponse.json({ error: 'Invalid block format' }, { status: 400 });
+      }
+      
+      contentToSave = stringifyBlocks(blocks);
+    } else if (content !== undefined) {
+      // 如果提供了 content，必須是字串
+      if (typeof content !== 'string') {
+        return NextResponse.json({ error: 'Content must be a string' }, { status: 400 });
+      }
+      contentToSave = content;
+    } else {
+      return NextResponse.json({ error: 'Either content or blocks must be provided' }, { status: 400 });
     }
 
     // 獲取當前使用者的 UserID
@@ -92,7 +114,7 @@ export async function PUT(
       const { error: testError } = await adminClient.from('auth_user_bridge').select('user_id').limit(1);
       if (testError && shouldUseMock(testError)) {
         console.log('📦 Using mock data (database tables not found)');
-        const { content: savedContent } = mockAPI.saveNodeContent(parseInt(courseId), parseInt(nodeId), content);
+        const { content: savedContent } = mockAPI.saveNodeContent(parseInt(courseId), parseInt(nodeId), contentToSave);
         return NextResponse.json({
           content: savedContent,
           _mock: true
@@ -113,7 +135,7 @@ export async function PUT(
 
     if (courseError && shouldUseMock(courseError)) {
       console.log('📦 Using mock data (database tables not found)');
-      const { content: savedContent } = mockAPI.saveNodeContent(parseInt(courseId), parseInt(nodeId), content);
+      const { content: savedContent } = mockAPI.saveNodeContent(parseInt(courseId), parseInt(nodeId), contentToSave);
       return NextResponse.json({
         content: savedContent,
         _mock: true
@@ -128,7 +150,7 @@ export async function PUT(
     const { data: node, error } = await supabase
       .from('node')
       .update({
-        Content: content,
+        Content: contentToSave,
         UpdatedAt: new Date().toISOString()
       })
       .eq('NodeID', parseInt(nodeId))
@@ -138,7 +160,7 @@ export async function PUT(
 
     if (error && shouldUseMock(error)) {
       console.log('📦 Using mock data (database tables not found)');
-      const { content: savedContent } = mockAPI.saveNodeContent(parseInt(courseId), parseInt(nodeId), content);
+      const { content: savedContent } = mockAPI.saveNodeContent(parseInt(courseId), parseInt(nodeId), contentToSave);
       return NextResponse.json({
         content: savedContent,
         _mock: true

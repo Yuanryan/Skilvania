@@ -31,7 +31,7 @@ export async function PUT(
         console.log('📦 Using mock data (database tables not found)');
         const updates: any = {};
         if (title !== undefined) updates.Title = title.trim();
-        if (type !== undefined && ['theory', 'code', 'project'].includes(type)) {
+        if (type !== undefined && ['theory', 'code', 'project', 'guide', 'tutorial', 'checklist', 'resource'].includes(type)) {
           updates.Type = type;
         }
         if (x !== undefined && typeof x === 'number' && x >= 0 && x <= 800) {
@@ -83,17 +83,17 @@ export async function PUT(
     // 構建更新對象
     const updates: any = {};
     if (title !== undefined) updates.Title = title.trim();
-    if (type !== undefined && ['theory', 'code', 'project'].includes(type)) {
+    if (type !== undefined && ['theory', 'code', 'project', 'guide', 'tutorial', 'checklist', 'resource'].includes(type)) {
       // 獲取或創建 TypeID
       const typeID = await getOrCreateTypeID(supabase, type);
       if (typeID) {
         updates.TypeID = typeID;
       }
     }
-    if (x !== undefined && typeof x === 'number' && x >= 0 && x <= 800) {
+    if (x !== undefined && typeof x === 'number' && x >= 0 && x <= 4000) {
       updates.X = x;
     }
-    if (y !== undefined && typeof y === 'number' && y >= 0 && y <= 800) {
+    if (y !== undefined && typeof y === 'number' && y >= 0 && y <= 4000) {
       updates.Y = y;
     }
     if (xp !== undefined && typeof xp === 'number' && xp >= 0) {

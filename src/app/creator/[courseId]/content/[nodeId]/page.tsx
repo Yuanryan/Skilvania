@@ -1,103 +1,34 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Save, Image as ImageIcon, Type, Video, Eye, Loader2, Edit3 } from 'lucide-react';
+import { ArrowLeft, Save, Eye, Loader2, Edit3, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-import rehypeRaw from 'rehype-raw';
-import 'highlight.js/styles/github-dark.css';
+import { parseContent } from '@/types/content';
+import { ContentBlock } from '@/types/content';
+import BlockEditor from '@/components/content/BlockEditor';
+import BlockRenderer from '@/lib/content/blockRenderer';
 
 export default function ContentEditorPage() {
   const params = useParams();
   const courseId = params.courseId as string;
   const nodeId = params.nodeId as string;
   
-  const [content, setContent] = useState('');
+  const [blocks, setBlocks] = useState<ContentBlock[]>([]);
   const [nodeTitle, setNodeTitle] = useState('Loading...');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [viewMode, setViewMode] = useState<'split' | 'edit' | 'preview'>('split');
-  const editorRef = useRef<HTMLTextAreaElement>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
-  const isScrollingRef = useRef<'editor' | 'preview' | null>(null);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedContentRef = useRef<string>('');
+  const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
     if (courseId && nodeId) {
       loadContent();
     }
   }, [courseId, nodeId]);
-
-  // 同步滾動：編輯器 -> 預覽
-  const handleEditorScroll = useCallback(() => {
-    if (isScrollingRef.current === 'preview' || !editorRef.current || !previewRef.current) return;
-    
-    const editor = editorRef.current;
-    const preview = previewRef.current;
-    
-    // 計算編輯器滾動比例
-    const editorScrollTop = editor.scrollTop;
-    const editorScrollHeight = editor.scrollHeight - editor.clientHeight;
-    
-    if (editorScrollHeight <= 0) return;
-    
-    const editorScrollRatio = editorScrollTop / editorScrollHeight;
-    
-    // 將比例應用到預覽區域
-    const previewScrollHeight = preview.scrollHeight - preview.clientHeight;
-    if (previewScrollHeight <= 0) return;
-    
-    const targetPreviewScroll = previewScrollHeight * editorScrollRatio;
-    
-    isScrollingRef.current = 'editor';
-    preview.scrollTop = targetPreviewScroll;
-    
-    // 清除之前的 timeout
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
-    
-    scrollTimeoutRef.current = setTimeout(() => {
-      isScrollingRef.current = null;
-    }, 100);
-  }, []);
-
-  // 同步滾動：預覽 -> 編輯器
-  const handlePreviewScroll = useCallback(() => {
-    if (isScrollingRef.current === 'editor' || !editorRef.current || !previewRef.current) return;
-    
-    const editor = editorRef.current;
-    const preview = previewRef.current;
-    
-    // 計算預覽滾動比例
-    const previewScrollTop = preview.scrollTop;
-    const previewScrollHeight = preview.scrollHeight - preview.clientHeight;
-    
-    if (previewScrollHeight <= 0) return;
-    
-    const previewScrollRatio = previewScrollTop / previewScrollHeight;
-    
-    // 將比例應用到編輯器
-    const editorScrollHeight = editor.scrollHeight - editor.clientHeight;
-    if (editorScrollHeight <= 0) return;
-    
-    const targetEditorScroll = editorScrollHeight * previewScrollRatio;
-    
-    isScrollingRef.current = 'preview';
-    editor.scrollTop = targetEditorScroll;
-    
-    // 清除之前的 timeout
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
-    
-    scrollTimeoutRef.current = setTimeout(() => {
-      isScrollingRef.current = null;
-    }, 100);
-  }, []);
 
   const loadContent = async () => {
     try {
@@ -107,7 +38,17 @@ export default function ContentEditorPage() {
         throw new Error('Failed to load content');
       }
       const data = await response.json();
-      setContent(data.content || '');
+      const loadedContent = data.content || '';
+      
+      // 始終解析為 Blocks（向後兼容：舊的 Markdown 內容會自動轉換）
+      const parsedBlocks = parseContent(loadedContent);
+      setBlocks(parsedBlocks);
+      
+      // 記錄初始內容，用於比較是否有變更
+      lastSavedContentRef.current = JSON.stringify(parsedBlocks);
+      isInitialLoadRef.current = true;
+      setSaved(true);
+      
       setNodeTitle(data.title || 'Node Content');
     } catch (error) {
       console.error('Error loading content:', error);
@@ -117,27 +58,90 @@ export default function ContentEditorPage() {
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
+  const saveContent = useCallback(async (blocksToSave: ContentBlock[]) => {
     try {
+      setSaving(true);
+      setSaved(false);
+      
+      // 始終使用 Block 格式儲存
+      const body = JSON.stringify({ blocks: blocksToSave });
+
       const response = await fetch(`/api/courses/${courseId}/nodes/${nodeId}/content`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content })
+        body
       });
 
       if (!response.ok) {
         throw new Error('Failed to save content');
       }
 
-      alert('Content saved successfully!');
+      // 記錄已保存的內容
+      lastSavedContentRef.current = JSON.stringify(blocksToSave);
+      setSaved(true);
+      
+      // 3秒後隱藏保存成功提示
+      setTimeout(() => {
+        setSaved(false);
+      }, 3000);
     } catch (error) {
       console.error('Error saving content:', error);
-      alert('Failed to save content');
+      setSaved(false);
     } finally {
       setSaving(false);
     }
+  }, [courseId, nodeId]);
+
+  // 自動保存：監聽 blocks 變化
+  useEffect(() => {
+    // 跳過初始載入
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    // 檢查內容是否有變更
+    const currentContent = JSON.stringify(blocks);
+    if (currentContent === lastSavedContentRef.current) {
+      return; // 沒有變更，不需要保存
+    }
+
+    // 清除之前的計時器
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+
+    // 設置新的防抖計時器（2秒後保存）
+    saveTimerRef.current = setTimeout(() => {
+      saveContent(blocks);
+    }, 2000);
+
+    // 清理函數
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, [blocks, saveContent]);
+
+  // 手動保存（保留原有功能）
+  const handleSave = async () => {
+    // 清除自動保存計時器
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    await saveContent(blocks);
   };
+
+  // 清理計時器
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col">
@@ -191,6 +195,20 @@ export default function ContentEditorPage() {
                 <Eye size={14} className="inline mr-1" /> Preview
             </button>
             </div>
+            {/* Auto-save Status */}
+            {(saving || saved) && (
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                {saving ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Saving...
+                  </>
+                ) : saved ? (
+                  <>
+                    <CheckCircle2 size={14} className="text-emerald-500" /> Saved
+                  </>
+                ) : null}
+              </div>
+            )}
             <button 
               onClick={handleSave}
               disabled={saving || loading}
@@ -215,17 +233,11 @@ export default function ContentEditorPage() {
         <aside className="w-64 bg-slate-900/50 border-r border-white/5 p-4 flex flex-col gap-4">
           <div className="space-y-2">
             <h3 className="text-xs text-slate-500 font-bold uppercase mb-2">Blocks</h3>
-            <button className="w-full flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 text-slate-300 hover:text-white border border-transparent hover:border-slate-600 transition-all text-sm">
-              <Type size={18} /> Text Block
-            </button>
-            <button className="w-full flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 text-slate-300 hover:text-white border border-transparent hover:border-slate-600 transition-all text-sm">
-              <ImageIcon size={18} /> Image
-            </button>
-            <button className="w-full flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 text-slate-300 hover:text-white border border-transparent hover:border-slate-600 transition-all text-sm">
-              <Video size={18} /> Video Embed
-            </button>
+            <p className="text-xs text-slate-500 mb-4">
+              在編輯區域點擊「新增」按鈕來新增 Block
+            </p>
           </div>
-            
+          
           <div className="mt-auto p-4 rounded-xl bg-amber-900/10 border border-amber-500/20">
             <h4 className="text-amber-500 font-bold text-xs mb-1">Pro Tip</h4>
             <p className="text-amber-200/60 text-xs leading-relaxed">
@@ -234,7 +246,7 @@ export default function ContentEditorPage() {
           </div>
         </aside>
 
-        {/* Markdown Editor Area */}
+        {/* Block Editor Area */}
         <main className="flex-1 bg-slate-950 overflow-hidden flex flex-col">
             {loading ? (
               <div className="flex-1 flex items-center justify-center">
@@ -244,62 +256,31 @@ export default function ContentEditorPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex-1 flex overflow-hidden">
+              <div className="flex-1 flex overflow-auto">
                 {/* Editor Panel */}
                 {(viewMode === 'edit' || viewMode === 'split') && (
-                  <div className={`${viewMode === 'split' ? 'w-1/2' : 'w-full'} border-r border-white/5 flex flex-col overflow-hidden`}>
+                  <div className={`${viewMode === 'split' ? 'w-1/2' : 'w-full'} border-r border-white/5 flex flex-col`}>
                     <div className="bg-slate-900/50 border-b border-white/5 px-4 py-2 flex-shrink-0">
-                      <h3 className="text-xs text-slate-400 font-bold uppercase">Markdown Editor</h3>
+                      <h3 className="text-xs text-slate-400 font-bold uppercase">
+                        Block Editor
+                      </h3>
                     </div>
-                <textarea 
-                        ref={editorRef}
-                        onScroll={handleEditorScroll}
-                        className="flex-1 w-full bg-slate-950 text-slate-200 font-mono text-sm focus:outline-none resize-none p-6 overflow-y-auto custom-scrollbar"
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    spellCheck={false}
-                        placeholder="# Enter your lesson content here...
-
-Use **Markdown** syntax to format your content:
-
-## Headings
-- **Bold text**
-- *Italic text*
-- `Code blocks`
-- [Links](https://example.com)
-- Lists
-  - Item 1
-  - Item 2
-
-```javascript
-// Code examples
-function hello() {
-  console.log('Hello!');
-}
-```"
-                    />
+                    <div className="flex-1 p-6">
+                      <BlockEditor blocks={blocks} onChange={setBlocks} />
+                    </div>
                   </div>
                 )}
 
                 {/* Preview Panel */}
                 {(viewMode === 'preview' || viewMode === 'split') && (
-                  <div className={`${viewMode === 'split' ? 'w-1/2' : 'w-full'} flex flex-col overflow-hidden`}>
+                  <div className={`${viewMode === 'split' ? 'w-1/2' : 'w-full'} flex flex-col`}>
                     <div className="bg-slate-900/50 border-b border-white/5 px-4 py-2 flex-shrink-0">
                       <h3 className="text-xs text-slate-400 font-bold uppercase">Preview</h3>
                     </div>
-                    <div 
-                      ref={previewRef}
-                      onScroll={handlePreviewScroll}
-                      className="flex-1 overflow-y-auto p-6 markdown-content custom-scrollbar"
-                    >
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeHighlight, rehypeRaw]}
-                      >
-                        {content || '*No content yet. Start typing in the editor...*'}
-                      </ReactMarkdown>
-                </div>
-            </div>
+                    <div className="flex-1 p-6 markdown-content">
+                      <BlockRenderer blocks={blocks} />
+                    </div>
+                  </div>
                 )}
               </div>
             )}
