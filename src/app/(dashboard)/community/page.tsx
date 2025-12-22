@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Users, Loader2, AlertCircle, UserCheck, Search, Globe, Trash2, User as UserIcon, Edit2, Save, X as XIcon, Plus, MessageSquare, UserPlus, Lock } from 'lucide-react';
+import { Users, Loader2, AlertCircle, UserCheck, Search, Globe, Trash2, User as UserIcon, Edit2, Save, X as XIcon, Plus, MessageSquare, UserPlus, Lock, Bell, Check, X } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -85,7 +85,7 @@ interface StudyGroup {
 export default function CommunityPage() {
   const { data: session } = useSession();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'buddies' | 'groups'>('buddies');
+  const [activeTab, setActiveTab] = useState<'buddies' | 'groups' | 'requests'>('buddies');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [connectionsData, setConnectionsData] = useState<ConnectionsData | null>(null);
   const [matches, setMatches] = useState<MatchedUser[]>([]);
@@ -112,6 +112,7 @@ export default function CommunityPage() {
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupDescription, setNewGroupDescription] = useState('');
   const [joiningGroupId, setJoiningGroupId] = useState<number | null>(null);
+  const [processingRequest, setProcessingRequest] = useState<number | null>(null);
 
   useEffect(() => {
     fetchProfile();
@@ -205,6 +206,119 @@ export default function CommunityPage() {
   const handleConnectionChange = () => {
     fetchConnections();
     fetchMatches();
+  };
+
+  const handleAcceptRequest = async (connectionId: number) => {
+    try {
+      setProcessingRequest(connectionId);
+      const response = await fetch(`/api/community/connections/${connectionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'accepted' })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(error.error || 'Failed to accept request');
+        return;
+      }
+
+      await fetchConnections();
+      await fetchMatches();
+    } catch (error) {
+      console.error('Error accepting request:', error);
+      alert('Failed to accept request');
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  const handleRejectRequest = async (connectionId: number) => {
+    try {
+      setProcessingRequest(connectionId);
+      const response = await fetch(`/api/community/connections/${connectionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejected' })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(error.error || 'Failed to reject request');
+        return;
+      }
+
+      await fetchConnections();
+    } catch (error) {
+      console.error('Error rejecting request:', error);
+      alert('Failed to reject request');
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  const renderIncomingRequest = (connection: Connection, isLast: boolean) => {
+    const isLoading = processingRequest === connection.connectionId;
+
+    return (
+      <div
+        key={connection.connectionId}
+        className={`flex items-center justify-between py-4 ${!isLast ? 'border-b border-white/10' : ''}`}
+      >
+        <div className="flex items-center space-x-3 flex-1">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold">
+            {connection.user.username.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <Link
+              href={`/profile/${connection.user.username}`}
+              className="font-semibold text-white hover:text-emerald-400 transition-colors"
+            >
+              {connection.user.username}
+            </Link>
+            <div className="flex items-center space-x-2 text-sm text-slate-400">
+              <span>Level {connection.user.level}</span>
+              <span className="text-slate-600">•</span>
+              <span>{connection.user.xp.toLocaleString()} XP</span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Sent {new Date(connection.createdAt).toLocaleDateString()}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => handleAcceptRequest(connection.connectionId)}
+            disabled={isLoading}
+            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+          >
+            {isLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <Check className="w-4 h-4" />
+                <span>Accept</span>
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => handleRejectRequest(connection.connectionId)}
+            disabled={isLoading}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+          >
+            {isLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <X className="w-4 h-4" />
+                <span>Reject</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    );
   };
 
   const handleRemove = async (connectionId: number) => {
@@ -762,6 +876,24 @@ export default function CommunityPage() {
             My Buddies ({connectionsData?.counts.accepted || 0})
           </button>
           <button
+            onClick={() => setActiveTab('requests')}
+            className={`px-4 py-2 font-medium transition-colors border-b-2 relative ${
+              activeTab === 'requests'
+                ? 'text-emerald-400 border-emerald-400'
+                : 'text-slate-400 border-transparent hover:text-white'
+            }`}
+          >
+            <span className="flex items-center space-x-2">
+              <Bell className="w-4 h-4" />
+              <span>Requests</span>
+              {connectionsData?.counts.pendingReceived > 0 && (
+                <span className="bg-emerald-500 text-white text-xs rounded-full px-2 py-0.5">
+                  {connectionsData.counts.pendingReceived}
+                </span>
+              )}
+            </span>
+          </button>
+          <button
             onClick={() => setActiveTab('groups')}
             className={`px-4 py-2 font-medium transition-colors border-b-2 ${
               activeTab === 'groups'
@@ -775,6 +907,33 @@ export default function CommunityPage() {
 
         {/* Content */}
         <div>
+          {activeTab === 'requests' && (
+            <div>
+              <h2 className="text-xl font-semibold text-white mb-4 flex items-center space-x-2">
+                <Bell className="w-5 h-5 text-emerald-400" />
+                <span>Incoming Connection Requests</span>
+              </h2>
+              
+              {connectionsData?.categorized.pendingReceived.length === 0 ? (
+                <div className="bg-slate-900 border border-white/10 rounded-2xl p-12 text-center">
+                  <Bell className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-white mb-2">
+                    No pending requests
+                  </h3>
+                  <p className="text-slate-400">
+                    You don't have any incoming connection requests at the moment.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-slate-900 border border-white/10 rounded-xl p-4 max-h-[calc(100vh-400px)] overflow-y-auto">
+                  {connectionsData?.categorized.pendingReceived.map((conn, index) => 
+                    renderIncomingRequest(conn, index === connectionsData.categorized.pendingReceived.length - 1)
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'buddies' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
               {/* Left Column: Connected Buddies (2/3 width) */}

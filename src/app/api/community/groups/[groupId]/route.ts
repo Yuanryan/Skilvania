@@ -110,7 +110,7 @@ export async function GET(
   }
 }
 
-// PUT /api/community/groups/[groupId] - Update group (admin only)
+// PUT /api/community/groups/[groupId] - Update group (any member can update)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ groupId: string }> }
@@ -183,17 +183,17 @@ export async function PUT(
       }
     }
 
-    // Check if user is admin of the group
+    // Check if user is a member of the group
     const { data: membership } = await supabase
       .from('group_members')
-      .select('Role')
+      .select('MembershipID')
       .eq('GroupID', groupIdNum)
       .eq('UserID', userId)
       .single();
 
-    if (!membership || membership.Role !== 'admin') {
+    if (!membership) {
       return NextResponse.json(
-        { error: 'Only group admins can update the group' },
+        { error: 'You must be a member of the group to update it' },
         { status: 403 }
       );
     }
@@ -238,7 +238,7 @@ export async function PUT(
   }
 }
 
-// DELETE /api/community/groups/[groupId] - Delete group (admin only)
+// DELETE /api/community/groups/[groupId] - Delete group (any member can delete)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ groupId: string }> }
@@ -262,17 +262,17 @@ export async function DELETE(
 
     const supabase = createAdminClient();
 
-    // Check if user is admin of the group
+    // Check if user is a member of the group
     const { data: membership } = await supabase
       .from('group_members')
-      .select('Role')
+      .select('MembershipID')
       .eq('GroupID', groupIdNum)
       .eq('UserID', userId)
       .single();
 
-    if (!membership || membership.Role !== 'admin') {
+    if (!membership) {
       return NextResponse.json(
-        { error: 'Only group admins can delete the group' },
+        { error: 'You must be a member of the group to delete it' },
         { status: 403 }
       );
     }

@@ -30,7 +30,7 @@ export async function POST(
     // Check if user is a member
     const { data: membership, error: membershipError } = await supabase
       .from('group_members')
-      .select('MembershipID, Role')
+      .select('MembershipID')
       .eq('GroupID', groupIdNum)
       .eq('UserID', userId)
       .single();
@@ -40,30 +40,6 @@ export async function POST(
         { error: 'You are not a member of this group' },
         { status: 404 }
       );
-    }
-
-    // Check if user is the only admin - prevent leaving if so
-    if (membership.Role === 'admin') {
-      const { count: adminCount } = await supabase
-        .from('group_members')
-        .select('MembershipID', { count: 'exact', head: true })
-        .eq('GroupID', groupIdNum)
-        .eq('Role', 'admin');
-
-      if (adminCount === 1) {
-        // Check if there are other members
-        const { count: memberCount } = await supabase
-          .from('group_members')
-          .select('MembershipID', { count: 'exact', head: true })
-          .eq('GroupID', groupIdNum);
-
-        if (memberCount && memberCount > 1) {
-          return NextResponse.json(
-            { error: 'You are the only admin. Please assign another admin before leaving or delete the group.' },
-            { status: 400 }
-          );
-        }
-      }
     }
 
     // Remove user from group

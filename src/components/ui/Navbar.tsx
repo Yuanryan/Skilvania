@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Sparkles, Layout, Map, User as UserIcon, PlusCircle, LogOut, BarChart3, Users, MessageCircle, UserPlus } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { logUserActivity } from "@/lib/utils/activityLogger";
@@ -17,6 +17,17 @@ export function Navbar() {
   const [pendingConnections, setPendingConnections] = useState(0);
   const router = useRouter();
   const loading = status === "loading";
+  // Use ref to persist isAdmin across re-renders during navigation
+  const isAdminRef = useRef<boolean>(false);
+  // Track the last known session to show nav during loading
+  const lastSessionRef = useRef(session);
+
+  // Update lastSessionRef when session changes
+  useEffect(() => {
+    if (session) {
+      lastSessionRef.current = session;
+    }
+  }, [session]);
 
   useEffect(() => {
     const fetchUsername = async () => {
@@ -44,20 +55,28 @@ export function Navbar() {
           const response = await fetch('/api/admin/check');
           if (response.ok) {
             const data = await response.json();
-            setIsAdmin(data.isAdmin || false);
+            const adminValue = data.isAdmin || false;
+            setIsAdmin(adminValue);
+            isAdminRef.current = adminValue;
           }
+          // If response is not ok, keep previous isAdmin value to prevent flicker
         } catch (error) {
           console.error("Error checking admin status:", error);
-          setIsAdmin(false);
+          // Don't reset to false on error - keep previous value to prevent flicker
+          // The previous admin status will remain until we get a successful response
         }
       } else {
+        // Only reset when session is actually gone
         setIsAdmin(false);
+        isAdminRef.current = false;
       }
     };
 
     fetchUsername();
     checkAdminStatus();
-  }, [session]);
+    // Use session?.user?.id instead of session to prevent unnecessary re-runs
+    // when session object reference changes but user hasn't changed
+  }, [session?.user?.id, session?.user?.email]);
 
   useEffect(() => {
     if (session?.user) {
@@ -133,9 +152,9 @@ export function Navbar() {
             <Map size={16} /> Explore
         </Link>
         
-        {loading ? (
+        {loading && !lastSessionRef.current?.user ? (
              <div className="w-8 h-8 rounded-full bg-slate-800/50 animate-pulse"></div>
-        ) : session?.user ? (
+        ) : (session?.user || lastSessionRef.current?.user) ? (
             <>
                 <Link 
                     href="/dashboard" 
@@ -171,7 +190,7 @@ export function Navbar() {
                 >
                     <PlusCircle size={16} /> Create
                 </Link>
-                {isAdmin && (
+                {(isAdmin || isAdminRef.current) && (
                     <Link 
                         href="/analytics" 
                         className="text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-colors"
@@ -186,8 +205,8 @@ export function Navbar() {
                       className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-500 hover:border-emerald-500 transition-colors" 
                       title="My Profile"
                     >
-                        {session.user.image ? (
-                            <img src={session.user.image} alt="Avatar" className="w-full h-full rounded-full object-cover" />
+                        {(session?.user || lastSessionRef.current?.user)?.image ? (
+                            <img src={(session?.user || lastSessionRef.current?.user)?.image} alt="Avatar" className="w-full h-full rounded-full object-cover" />
                         ) : (
                             <UserIcon size={16} />
                         )}

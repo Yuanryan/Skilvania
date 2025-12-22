@@ -99,7 +99,7 @@ export async function GET(
   }
 }
 
-// POST /api/community/groups/[groupId]/members - Invite/add a member (admin only)
+// POST /api/community/groups/[groupId]/members - Invite/add a member (any member can add)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ groupId: string }> }
@@ -133,17 +133,17 @@ export async function POST(
 
     const supabase = createAdminClient();
 
-    // Check if requester is admin
+    // Check if requester is a member of the group
     const { data: membership } = await supabase
       .from('group_members')
-      .select('Role')
+      .select('MembershipID')
       .eq('GroupID', groupIdNum)
       .eq('UserID', userId)
       .single();
 
-    if (!membership || membership.Role !== 'admin') {
+    if (!membership) {
       return NextResponse.json(
-        { error: 'Only group admins can invite members' },
+        { error: 'You must be a member of the group to add others' },
         { status: 403 }
       );
     }
@@ -214,7 +214,7 @@ export async function POST(
   }
 }
 
-// DELETE /api/community/groups/[groupId]/members?userId=X - Remove a member (admin only)
+// DELETE /api/community/groups/[groupId]/members?userId=X - Remove a member (any member can remove others)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ groupId: string }> }
@@ -253,17 +253,17 @@ export async function DELETE(
 
     const supabase = createAdminClient();
 
-    // Check if requester is admin
+    // Check if requester is a member of the group
     const { data: membership } = await supabase
       .from('group_members')
-      .select('Role')
+      .select('MembershipID')
       .eq('GroupID', groupIdNum)
       .eq('UserID', userId)
       .single();
 
-    if (!membership || membership.Role !== 'admin') {
+    if (!membership) {
       return NextResponse.json(
-        { error: 'Only group admins can remove members' },
+        { error: 'You must be a member of the group to remove others' },
         { status: 403 }
       );
     }

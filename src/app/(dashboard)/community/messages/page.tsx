@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
-import { MessageCircle, Loader2, AlertCircle, Send, ArrowLeft } from 'lucide-react';
+import { MessageCircle, Loader2, AlertCircle, Send, ArrowLeft, UserPlus, X, Users, LogOut } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import { useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { createClient } from '@/lib/supabase/client';
 
 interface Conversation {
   type: 'dm' | 'group';
@@ -45,6 +47,7 @@ function MessagesPageContent() {
   const searchParams = useSearchParams();
   const initialUserId = searchParams.get('userId');
   const initialGroupId = searchParams.get('groupId');
+  const { data: session } = useSession();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<{ type: 'dm' | 'group'; id: number } | null>(
@@ -54,11 +57,18 @@ function MessagesPageContent() {
   const [chatData, setChatData] = useState<ChatData | null>(null);
   const [groupMessages, setGroupMessages] = useState<any[]>([]);
   const [groupInfo, setGroupInfo] = useState<any>(null);
+  const [groupMembers, setGroupMembers] = useState<any[]>([]);
   const [messageInput, setMessageInput] = useState('');
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [isLoadingChat, setIsLoadingChat] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAddMembersModal, setShowAddMembersModal] = useState(false);
+  const [studyBuddies, setStudyBuddies] = useState<any[]>([]);
+  const [isLoadingBuddies, setIsLoadingBuddies] = useState(false);
+  const [addingMembers, setAddingMembers] = useState<number[]>([]);
+  const [isLeavingGroup, setIsLeavingGroup] = useState(false);
+  const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -70,6 +80,29 @@ function MessagesPageContent() {
     const interval = setInterval(fetchConversations, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const fetchCurrentUsername = async () => {
+      if (session?.user?.email) {
+        try {
+          const supabase = createClient();
+          const { data: userData } = await supabase
+            .from('USER')
+            .select('Username')
+            .eq('Email', session.user.email)
+            .single();
+
+          if (userData) {
+            setCurrentUsername(userData.Username);
+          }
+        } catch (error) {
+          console.error('Error fetching current username:', error);
+        }
+      }
+    };
+
+    fetchCurrentUsername();
+  }, [session?.user?.email]);
 
   useEffect(() => {
     if (selectedConversation) {
@@ -152,6 +185,13 @@ function MessagesPageContent() {
       }
       const groupData = await groupRes.json();
       
+      // Fetch group members
+      const membersRes = await fetch(`/api/community/groups/${groupId}/members`);
+      if (membersRes.ok) {
+        const membersData = await membersRes.json();
+        setGroupMembers(membersData.members || []);
+      }
+      
       setGroupMessages(messagesData.messages || []);
       setGroupInfo(groupData.group);
       setChatData(null);
@@ -170,6 +210,91 @@ function MessagesPageContent() {
       setError(err instanceof Error ? err.message : 'Failed to load messages');
     } finally {
       if (!silent) setIsLoadingChat(false);
+    }
+  };
+
+  const fetchStudyBuddies = async () => {
+    try {
+      setIsLoadingBuddies(true);
+      const response = await fetch('/api/community/connections?status=accepted');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch study buddies');
+      }
+
+      const data = await response.json();
+      // Get only accepted connections (study buddies)
+      const buddies = data.categorized?.accepted || [];
+      setStudyBuddies(buddies);
+    } catch (err) {
+      console.error('Error fetching study buddies:', err);
+      alert('Failed to load study buddies');
+    } finally {
+      setIsLoadingBuddies(false);
+    }
+  };
+
+  const handleAddMember = async (userId: number) => {
+    if (!selectedConversation || selectedConversation.type !== 'group') return;
+
+    try {
+      setAddingMembers(prev => [...prev, userId]);
+      const response = await fetch(`/api/community/groups/${selectedConversation.id}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inviteUserId: userId })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to add member');
+      }
+
+      // Refresh group members and info
+      await fetchGroupChat(selectedConversation.id, true);
+      // Remove from study buddies list (they're now in the group)
+      setStudyBuddies(prev => prev.filter(buddy => buddy.user.userID !== userId));
+    } catch (error) {
+      console.error('Error adding member:', error);
+      alert(error instanceof Error ? error.message : 'Failed to add member');
+    } finally {
+      setAddingMembers(prev => prev.filter(id => id !== userId));
+    }
+  };
+
+  const openAddMembersModal = () => {
+    setShowAddMembersModal(true);
+    fetchStudyBuddies();
+  };
+
+  const handleLeaveGroup = async () => {
+    if (!selectedConversation || selectedConversation.type !== 'group') return;
+
+    const confirmed = confirm(
+      `Are you sure you want to leave "${groupInfo?.name}"? You will no longer receive messages from this group.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setIsLeavingGroup(true);
+      const response = await fetch(`/api/community/groups/${selectedConversation.id}/leave`, {
+        method: 'POST'
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to leave group');
+      }
+
+      // Navigate back to messages list
+      setSelectedConversation(null);
+      await fetchConversations();
+    } catch (error) {
+      console.error('Error leaving group:', error);
+      alert(error instanceof Error ? error.message : 'Failed to leave group');
+    } finally {
+      setIsLeavingGroup(false);
     }
   };
 
@@ -398,8 +523,13 @@ function MessagesPageContent() {
                       {chatData.messages.map((msg) => (
                         <div
                           key={msg.messageId}
-                          className={`flex ${msg.isFromMe ? 'justify-end' : 'justify-start'}`}
+                          className={`flex items-end gap-2 ${msg.isFromMe ? 'justify-end' : 'justify-start'}`}
                         >
+                          {!msg.isFromMe && chatData.otherUser && (
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                              {chatData.otherUser.username.charAt(0).toUpperCase()}
+                            </div>
+                          )}
                           <div
                             className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
                               msg.isFromMe
@@ -412,6 +542,11 @@ function MessagesPageContent() {
                               {formatTime(msg.createdAt)}
                             </span>
                           </div>
+                          {msg.isFromMe && currentUsername && (
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                              {currentUsername.charAt(0).toUpperCase()}
+                            </div>
+                          )}
                         </div>
                       ))}
                       <div ref={messagesEndRef} />
@@ -464,23 +599,55 @@ function MessagesPageContent() {
               <>
                 {/* Group Chat Header */}
                 <div className="border-b border-white/10 bg-slate-900/50">
-                  <div className="p-4 flex items-center space-x-3">
-                    <button
-                      onClick={() => setSelectedConversation(null)}
-                      className="md:hidden text-slate-400 hover:text-white"
-                    >
-                      <ArrowLeft className="w-6 h-6" />
-                    </button>
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
-                      {groupInfo.name.charAt(0).toUpperCase()}
+                  <div className="p-4 flex items-center justify-between">
+                    <div className="flex items-center space-x-3 flex-1">
+                      <button
+                        onClick={() => setSelectedConversation(null)}
+                        className="md:hidden text-slate-400 hover:text-white"
+                      >
+                        <ArrowLeft className="w-6 h-6" />
+                      </button>
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
+                        {groupInfo.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-white">
+                          {groupInfo.name}
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          {groupInfo.memberCount} members • {groupInfo.type === 'public' ? 'Public' : 'Private'} Group
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-white">
-                        {groupInfo.name}
-                      </h3>
-                      <p className="text-xs text-slate-400">
-                        {groupInfo.memberCount} members • {groupInfo.type === 'public' ? 'Public' : 'Private'} Group
-                      </p>
+                    <div className="flex items-center space-x-2">
+                      {groupInfo.isMember && (
+                        <button
+                          onClick={openAddMembersModal}
+                          className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors flex items-center space-x-2 text-sm"
+                        >
+                          <UserPlus className="w-4 h-4" />
+                          <span className="hidden sm:inline">Add Members</span>
+                        </button>
+                      )}
+                      {groupInfo.isMember && (
+                        <button
+                          onClick={handleLeaveGroup}
+                          disabled={isLeavingGroup}
+                          className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2 text-sm"
+                        >
+                          {isLeavingGroup ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span className="hidden sm:inline">Leaving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <LogOut className="w-4 h-4" />
+                              <span className="hidden sm:inline">Leave Group</span>
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -511,8 +678,13 @@ function MessagesPageContent() {
                       {groupMessages.map((msg: any) => (
                         <div
                           key={msg.messageId}
-                          className={`flex ${msg.isFromMe ? 'justify-end' : 'justify-start'}`}
+                          className={`flex items-end gap-2 ${msg.isFromMe ? 'justify-end' : 'justify-start'}`}
                         >
+                          {!msg.isFromMe && msg.senderUsername && (
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                              {msg.senderUsername.charAt(0).toUpperCase()}
+                            </div>
+                          )}
                           <div
                             className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
                               msg.isFromMe
@@ -530,6 +702,11 @@ function MessagesPageContent() {
                               {formatTime(msg.createdAt)}
                             </span>
                           </div>
+                          {msg.isFromMe && currentUsername && (
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                              {currentUsername.charAt(0).toUpperCase()}
+                            </div>
+                          )}
                         </div>
                       ))}
                       <div ref={messagesEndRef} />
@@ -565,6 +742,104 @@ function MessagesPageContent() {
                     </button>
                   </div>
                 </form>
+
+                {/* Add Members Modal */}
+                {showAddMembersModal && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-md w-full max-h-[80vh] flex flex-col">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-xl font-bold text-white flex items-center space-x-2">
+                          <UserPlus className="w-5 h-5" />
+                          <span>Add Study Buddies</span>
+                        </h3>
+                        <button
+                          onClick={() => setShowAddMembersModal(false)}
+                          className="text-slate-400 hover:text-white transition-colors"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto mb-4">
+                        {isLoadingBuddies ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
+                          </div>
+                        ) : studyBuddies.length === 0 ? (
+                          <div className="text-center py-8">
+                            <Users className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                            <p className="text-slate-400">No study buddies available</p>
+                            <p className="text-sm text-slate-500 mt-2">
+                              Connect with users to add them to this group
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {studyBuddies
+                              .filter(buddy => {
+                                // Filter out buddies who are already members
+                                return !groupMembers.some(member => member.userId === buddy.user.userID);
+                              })
+                              .map((buddy) => {
+                                const isAdding = addingMembers.includes(buddy.user.userID);
+                                return (
+                                  <div
+                                    key={buddy.connectionId}
+                                    className="flex items-center justify-between p-3 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors"
+                                  >
+                                    <div className="flex items-center space-x-3">
+                                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold">
+                                        {buddy.user.username.charAt(0).toUpperCase()}
+                                      </div>
+                                      <div>
+                                        <p className="font-semibold text-white">
+                                          {buddy.user.username}
+                                        </p>
+                                        <p className="text-xs text-slate-400">
+                                          Level {buddy.user.level} • {buddy.user.xp.toLocaleString()} XP
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => handleAddMember(buddy.user.userID)}
+                                      disabled={isAdding}
+                                      className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2 text-sm"
+                                    >
+                                      {isAdding ? (
+                                        <>
+                                          <Loader2 className="w-4 h-4 animate-spin" />
+                                          <span>Adding...</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <UserPlus className="w-4 h-4" />
+                                          <span>Add</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            {studyBuddies.filter(buddy => 
+                              !groupMembers.some(member => member.userId === buddy.user.userID)
+                            ).length === 0 && (
+                              <div className="text-center py-8">
+                                <p className="text-slate-400">All your study buddies are already in this group</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => setShowAddMembersModal(false)}
+                        className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center text-center p-8">

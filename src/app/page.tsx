@@ -1,15 +1,15 @@
 "use client";
 
 import Link from 'next/link';
-import { Sparkles, ArrowRight, Users, Search, Loader2, AlertCircle, TrendingUp, RefreshCw } from 'lucide-react';
+import { Sparkles, Users, Search, Loader2, AlertCircle, TrendingUp } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import { StartButton } from '@/components/landing/StartButton';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 
 // Import from courses page
-import { Globe, Code, Cpu, Database, Sparkles as SparklesIcon } from 'lucide-react';
+import { Globe, Code, Cpu, Database } from 'lucide-react';
 
 const iconMap: Record<string, any> = {
   'web': Globe,
@@ -103,12 +103,40 @@ interface MatchedUser {
   compatibilityScore: number;
 }
 
+interface StudyGroup {
+  groupId: number;
+  name: string;
+  description: string | null;
+  type: 'public' | 'private';
+  tagId: number | null;
+  tagName: string | null;
+  creatorId: number;
+  memberCount: number;
+  isMember: boolean;
+  userRole: 'admin' | 'member' | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface CoursesByTag {
   [tag: string]: Course[];
 }
 
 // Branching Animation Component
 const BranchingLines = () => {
+  // Sync with seed animation:
+  // Seed fades out 1200-1400px.
+  // Tree should start growing just as seed plants (approx 1350px) and finish by 1700px.
+  const { scrollY } = useScroll();
+
+  const pathLength = useTransform(scrollY, [1350, 1700], [0, 1]);
+  // Branches fade in, then fade out right after appearing
+  const opacity = useTransform(scrollY, [1350, 1400, 1600, 1700], [0, 1, 1, 0]);
+  
+  // Import useTransform for the circle animation
+  const circleOpacity = useTransform(scrollY, [1300, 1400], [0, 1]);
+  const circleScale = useTransform(scrollY, [1300, 1400], [0, 1]);
+
   return (
     <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
       <svg className="w-full h-full" preserveAspectRatio="xMidYMin meet" viewBox="0 0 100 100">
@@ -121,53 +149,45 @@ const BranchingLines = () => {
             </feMerge>
           </filter>
         </defs>
-        {/* Main Trunk */}
+        {/* Main Trunk - positioned slightly left */}
         <motion.path
-          d="M50 0 L50 20"
+          d="M43 3 L43 20"
           stroke="#34d399"
           strokeWidth="0.5"
           strokeLinecap="round"
           filter="url(#glow)"
           fill="none"
-          initial={{ pathLength: 0, opacity: 0 }}
-          animate={{ pathLength: 1, opacity: [0, 1, 0.5, 0] }}
-          transition={{ duration: 1, ease: "easeInOut" }}
+          style={{ pathLength, opacity }}
         />
         {/* Branch Left */}
         <motion.path
-          d="M50 20 C50 35 20 35 20 50"
+          d="M43 20 C43 35 13 35 13 50"
           stroke="#34d399"
           strokeWidth="0.4"
           strokeLinecap="round"
           filter="url(#glow)"
           fill="none"
-          initial={{ pathLength: 0, opacity: 0 }}
-          animate={{ pathLength: 1, opacity: [0, 1, 0.5, 0] }}
-          transition={{ duration: 1.2, delay: 0.5, ease: "easeInOut" }}
+          style={{ pathLength, opacity }}
         />
         {/* Branch Center */}
         <motion.path
-          d="M50 20 L50 50"
+          d="M43 20 L43 50"
           stroke="#34d399"
           strokeWidth="0.4"
           strokeLinecap="round"
           filter="url(#glow)"
           fill="none"
-          initial={{ pathLength: 0, opacity: 0 }}
-          animate={{ pathLength: 1, opacity: [0, 1, 0.5, 0] }}
-          transition={{ duration: 1.2, delay: 0.5, ease: "easeInOut" }}
+          style={{ pathLength, opacity }}
         />
         {/* Branch Right */}
         <motion.path
-          d="M50 20 C50 35 80 35 80 50"
+          d="M43 20 C43 35 73 35 73 50"
           stroke="#34d399"
           strokeWidth="0.4"
           strokeLinecap="round"
           filter="url(#glow)"
           fill="none"
-          initial={{ pathLength: 0, opacity: 0 }}
-          animate={{ pathLength: 1, opacity: [0, 1, 0.5, 0] }}
-          transition={{ duration: 1.2, delay: 0.5, ease: "easeInOut" }}
+          style={{ pathLength, opacity }}
         />
       </svg>
     </div>
@@ -178,19 +198,22 @@ export default function LandingPage() {
   const pathname = usePathname();
   const router = useRouter();
   const exploreRef = useRef<HTMLElement>(null);
-  const [showAnimation, setShowAnimation] = useState(false);
   const [hasEnteredExplore, setHasEnteredExplore] = useState(false);
   const [allCourses, setAllCourses] = useState<Course[]>([]);
   const [trendingCourses, setTrendingCourses] = useState<Course[]>([]);
   const [coursesByTag, setCoursesByTag] = useState<CoursesByTag>({});
   const [recommendedUsers, setRecommendedUsers] = useState<MatchedUser[]>([]);
+  const [recommendedGroups, setRecommendedGroups] = useState<StudyGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [groupsLoading, setGroupsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [shouldScrollToExplore, setShouldScrollToExplore] = useState(false);
+  const [joiningGroupId, setJoiningGroupId] = useState<number | null>(null);
   const fetchedRef = useRef(false);
+  const groupsFetchedRef = useRef(false);
 
   // Custom smooth scroll function with slower speed
   const smoothScrollTo = (element: HTMLElement | null, duration: number = 1500) => {
@@ -222,11 +245,7 @@ export default function LandingPage() {
   };
 
   const handleStartClick = () => {
-    setShowAnimation(true);
-    setTimeout(() => {
-      smoothScrollTo(exploreRef.current, 1500); // Slower scroll (1500ms = 1.5 seconds)
-      // Intersection Observer will handle setting hasEnteredExplore
-    }, 200);
+    smoothScrollTo(exploreRef.current, 1500);
   };
 
   // Use Intersection Observer to detect when explore section is visible/hidden
@@ -363,6 +382,71 @@ export default function LandingPage() {
     }
   }, []);
 
+  // Fetch recommended study groups function - with smart caching
+  const fetchRecommendedGroups = useCallback(async (forceRefresh = false) => {
+    // Skip if already fetched and not forcing refresh
+    if (groupsFetchedRef.current && !forceRefresh) {
+      return;
+    }
+
+    try {
+      setGroupsLoading(true);
+      const response = await fetch('/api/community/groups/recommended', {
+        // Only add no-cache headers when forcing refresh
+        ...(forceRefresh && {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Recommended groups data:', data);
+        const groups = data.recommendedGroups || [];
+        console.log('Setting recommended groups:', groups.length);
+        setRecommendedGroups(groups);
+        groupsFetchedRef.current = true;
+      } else {
+        console.error('Failed to fetch recommended groups:', response.status, response.statusText);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error details:', errorData);
+        setRecommendedGroups([]); // Set empty array on error
+      }
+    } catch (err) {
+      console.error('Failed to fetch recommended groups:', err);
+    } finally {
+      setGroupsLoading(false);
+    }
+  }, []);
+
+  // Handle joining a study group
+  const handleJoinGroup = useCallback(async (groupId: number) => {
+    try {
+      setJoiningGroupId(groupId);
+      const response = await fetch(`/api/community/groups/${groupId}/join`, {
+        method: 'POST'
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(error.error || 'Failed to join group');
+        return;
+      }
+
+      // Refresh recommended groups to update membership status
+      await fetchRecommendedGroups(true);
+      
+      // Navigate to the group in messages
+      router.push(`/community/messages?groupId=${groupId}`);
+    } catch (error) {
+      console.error('Error joining group:', error);
+      alert('Failed to join group');
+    } finally {
+      setJoiningGroupId(null);
+    }
+  }, [fetchRecommendedGroups, router]);
+
   // Function to scroll to explore section - simplified
   const scrollToExplore = useCallback(() => {
     if (!exploreRef.current) return;
@@ -383,8 +467,9 @@ export default function LandingPage() {
     if (pathname === '/') {
       fetchCourses();
       fetchRecommendedUsers();
+      fetchRecommendedGroups();
     }
-  }, [pathname, fetchCourses, fetchRecommendedUsers]);
+  }, [pathname, fetchCourses, fetchRecommendedUsers, fetchRecommendedGroups]);
 
   // Handle scroll position and hash changes - simplified
   useEffect(() => {
@@ -395,7 +480,7 @@ export default function LandingPage() {
         setHasEnteredExplore(true);
         
         // If data is already loaded, scroll immediately
-        if (!loading && !usersLoading && exploreRef.current) {
+        if (!loading && !usersLoading && !groupsLoading && exploreRef.current) {
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               scrollToExplore();
@@ -425,7 +510,7 @@ export default function LandingPage() {
 
   // Scroll to explore section after data is loaded
   useEffect(() => {
-    if (shouldScrollToExplore && !loading && !usersLoading && exploreRef.current) {
+    if (shouldScrollToExplore && !loading && !usersLoading && !groupsLoading && exploreRef.current) {
       // Wait for DOM to settle
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -434,7 +519,7 @@ export default function LandingPage() {
         });
       });
     }
-  }, [shouldScrollToExplore, loading, usersLoading, scrollToExplore]);
+  }, [shouldScrollToExplore, loading, usersLoading, groupsLoading, scrollToExplore]);
 
   const filteredCourses = searchQuery.trim() 
     ? allCourses.filter(course => 
@@ -477,13 +562,15 @@ export default function LandingPage() {
             <div className="h-6 bg-slate-700/50 rounded w-32"></div>
             <div className="h-4 bg-slate-700/30 rounded w-20"></div>
           </div>
-          <div className="w-full overflow-x-auto pb-4">
-            <div className="flex gap-6 min-w-max">
-              {[1, 2, 3, 4].map((j) => (
-                <div key={j} className="flex-shrink-0 w-80">
-                  <CourseCardSkeleton />
-                </div>
-              ))}
+          <div className="relative">
+            <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
+              <div className="flex gap-6 min-w-max">
+                {[1, 2, 3, 4].map((j) => (
+                  <div key={j} className="flex-shrink-0 w-80">
+                    <CourseCardSkeleton />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -536,41 +623,49 @@ export default function LandingPage() {
         </div>
       )}
       
-      {/* Hero Section */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center text-center px-6 pt-20 pb-32 overflow-hidden">
-        
-        {/* Background Effects */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-emerald-900/20 rounded-full blur-3xl"></div>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-slate-900/50 via-transparent to-transparent"></div>
-        </div>
+      {/* Hero Section - Sticky Wrapper */}
+      {/* 
+          The wrapper provides scroll space (100vh + 850px).
+          Phase 1 (0-700px): Button transforms to round seed, page stays fixed
+          Phase 2 (700-850px): Seed moves down, page still stays fixed
+          After 850px: Page scrolls naturally (earlier transition)
+      */}
+      <div className="relative h-[calc(100vh+700px)] z-30">
+        <section className="sticky top-0 h-screen flex flex-col items-center justify-center text-center px-6 pt-20 pb-32">
+          
+          {/* Background Effects */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-emerald-900/20 rounded-full blur-3xl"></div>
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-slate-900/50 via-transparent to-transparent"></div>
+          </div>
 
-        <div className="relative z-10 max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/50 border border-emerald-800/50 text-emerald-400 text-sm font-medium mb-6 animate-fade-in">
-            <Sparkles size={14} />
-            <span>Reimagine Learning</span>
+          <div className="relative z-10 max-w-4xl mx-auto">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/50 border border-emerald-800/50 text-emerald-400 text-sm font-medium mb-6 animate-fade-in">
+              <Sparkles size={14} />
+              <span>Reimagine Learning</span>
+            </div>
+            
+            <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white mb-8 leading-tight">
+              Grow Your Skills like a <br/>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">Living Tree</span>
+            </h1>
+            
+            <p className="text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed">
+              Forget linear lists. Skilvania visualizes your knowledge as an organic, evolving forest. Unlock nodes, branch out, and cultivate your expertise in a gamified RPG world.
+            </p>
+            
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <StartButton onStartClick={handleStartClick} />
+              <Link 
+                href="/creator" 
+                className="px-8 py-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-lg transition-all border border-slate-700 hover:border-slate-600"
+              >
+                Create a Course
+              </Link>
+            </div>
           </div>
-          
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white mb-8 leading-tight">
-            Grow Your Skills like a <br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">Living Tree</span>
-          </h1>
-          
-          <p className="text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-            Forget linear lists. Skilvania visualizes your knowledge as an organic, evolving forest. Unlock nodes, branch out, and cultivate your expertise in a gamified RPG world.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <StartButton onStartClick={handleStartClick} />
-            <Link 
-              href="/creator" 
-              className="px-8 py-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-lg transition-all border border-slate-700 hover:border-slate-600"
-            >
-              Create a Course
-            </Link>
-          </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       {/* Explore Section */}
       <section 
@@ -578,25 +673,13 @@ export default function LandingPage() {
         ref={exploreRef} 
         className="relative border-t border-white/5 pt-32 pb-20"
       >
-        {showAnimation && <BranchingLines />}
+        <BranchingLines />
         
         <div className="max-w-7xl mx-auto w-full px-6 pr-0 lg:pr-[calc(20rem+2rem)] xl:pr-[calc(24rem+2rem)] relative z-10">
-          <div className="mb-12 flex items-center justify-between">
+          <div className="mb-12">
             <h1 className="text-5xl font-bold text-white">
               Explore <span className="text-emerald-400">Learning Paths</span>
             </h1>
-            <button
-              onClick={() => {
-                fetchCourses(true);
-                fetchRecommendedUsers(true);
-              }}
-              disabled={loading || usersLoading}
-              className="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-400 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Refresh content"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading || usersLoading ? 'animate-spin' : ''}`} />
-              <span className="text-sm font-medium">Refresh</span>
-            </button>
           </div>
 
           {error ? (
@@ -641,19 +724,6 @@ export default function LandingPage() {
                         <p className="text-slate-400 text-sm">Popular courses updated recently ({trendingCourses.length})</p>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => {
-                        // Scroll to categories section
-                        const categoriesSection = document.querySelector('[data-section="categories"]');
-                        if (categoriesSection) {
-                          categoriesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                      }}
-                      className="text-emerald-400 hover:text-emerald-300 text-sm font-medium flex items-center gap-1"
-                    >
-                      View All
-                      <ArrowRight size={16} />
-                    </button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {trendingCourses.map(course => (
@@ -712,57 +782,33 @@ export default function LandingPage() {
               {/* Courses by Tags */}
               {loading ? (
                 <section data-section="categories">
-                  <div className="flex items-center gap-3 mb-8">
-                    <div className="p-2 bg-purple-900/20 rounded-lg border border-purple-500/20">
-                      <SparklesIcon className="text-purple-400" size={24} />
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-bold text-white">Browse by Category</h2>
-                      <p className="text-slate-400 text-sm">Loading...</p>
-                    </div>
-                  </div>
                   <CategorySectionSkeleton />
                 </section>
               ) : !isSearching && Object.keys(coursesByTag).length > 0 && (
                 <section data-section="categories">
-                  <div className="flex items-center gap-3 mb-8">
-                    <div className="p-2 bg-purple-900/20 rounded-lg border border-purple-500/20">
-                      <SparklesIcon className="text-purple-400" size={24} />
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-bold text-white">Browse by Category</h2>
-                      <p className="text-slate-400 text-sm">Explore courses organized by topic</p>
-                    </div>
-                  </div>
-                  
                   <div className="space-y-12">
                     {Object.entries(coursesByTag)
                       .sort(([, coursesA], [, coursesB]) => coursesB.length - coursesA.length)
                       .slice(0, 5)
                       .map(([tag, courses]) => (
                         <div key={tag}>
-                          <div className="flex items-center justify-between mb-4">
+                          <div className="mb-4">
                             <h3 className="text-xl font-bold text-white capitalize">
                               {tag}
                               <span className="ml-2 text-sm font-normal text-slate-400">
                                 ({courses.length} {courses.length === 1 ? 'course' : 'courses'})
                               </span>
                             </h3>
-                            <button
-                              onClick={() => setSearchQuery(tag)}
-                              className="text-emerald-400 hover:text-emerald-300 text-sm font-medium flex items-center gap-1"
-                            >
-                              View All
-                              <ArrowRight size={16} />
-                            </button>
                           </div>
-                          <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
-                            <div className="flex gap-6 min-w-max">
-                              {courses.map(course => (
-                                <div key={course.id} className="flex-shrink-0 w-80">
-                                  <CourseCard course={course} />
-                                </div>
-                              ))}
+                          <div className="relative">
+                            <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
+                              <div className="flex gap-6 min-w-max">
+                                {courses.map(course => (
+                                  <div key={course.id} className="flex-shrink-0 w-80">
+                                    <CourseCard course={course} />
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -786,15 +832,15 @@ export default function LandingPage() {
 
         {/* Right Sidebar - Connect with Learners */}
         <AnimatePresence>
-          {hasEnteredExplore && !isSearching && recommendedUsers.length > 0 && (
+          {hasEnteredExplore && !isSearching && (recommendedUsers.length > 0 || recommendedGroups.length > 0 || groupsLoading || usersLoading) && (
             <motion.aside 
               initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 50, transition: { duration: 0.3 } }}
               transition={{ duration: 0.5, delay: 0.3 }}
-              className="hidden lg:block fixed right-0 top-0 h-screen w-80 xl:w-96 pt-24 pb-6 pr-6 pointer-events-none"
+              className="hidden lg:block fixed right-0 top-0 h-screen w-80 xl:w-96 pt-24 pb-6 pr-6 z-40"
             >
-            <div className="h-full overflow-y-auto pr-2 no-scrollbar pointer-events-auto">
+            <div className="h-full overflow-y-auto pr-2 no-scrollbar">
               <div className="bg-slate-900/50 backdrop-blur border border-white/10 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
@@ -803,103 +849,162 @@ export default function LandingPage() {
                     </div>
                     <div>
                       <h2 className="text-lg font-bold text-white">Connect</h2>
-                      <p className="text-slate-400 text-xs">Study buddies</p>
+                      <p className="text-slate-400 text-xs">Study buddies & groups</p>
                     </div>
                   </div>
 
                 </div>
                 
-                <div className="max-h-[calc(100vh-250px)] overflow-y-auto pr-2 custom-scrollbar">
-                  {recommendedUsers.map((user, index) => (
-                    <div key={user.userID}>
-                      <div className="py-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-3 flex-1">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                              {user.username.charAt(0).toUpperCase()}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-semibold text-white text-sm truncate">{user.username}</h3>
-                              <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
-                                <span>Level {user.level}</span>
-                                <span>•</span>
-                                <span>{user.xp.toLocaleString()} XP</span>
+                <div className="max-h-[calc(100vh-250px)] overflow-y-auto pr-2 custom-scrollbar space-y-6">
+                  {/* Users Section - Study Buddies on top */}
+                  {usersLoading && recommendedUsers.length === 0 && (
+                    <div className="py-4 text-center">
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-400 mx-auto mb-2" />
+                      <p className="text-xs text-slate-400">Loading study buddies...</p>
+                    </div>
+                  )}
+                  {recommendedUsers.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">Study Buddies</h3>
+                      {recommendedUsers.slice(0, 3).map((user, index) => (
+                        <div key={user.userID}>
+                          <div className="py-4">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-3 flex-1">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                                  {user.username.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold text-white text-sm truncate">{user.username}</h3>
+                                  <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
+                                    <span>Level {user.level}</span>
+                                    <span>•</span>
+                                    <span>{user.xp.toLocaleString()} XP</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className={`px-2 py-1 rounded text-xs font-semibold ${
+                                user.compatibilityScore >= 80 ? 'text-emerald-400 bg-emerald-900/30' :
+                                user.compatibilityScore >= 60 ? 'text-blue-400 bg-blue-900/30' :
+                                user.compatibilityScore >= 40 ? 'text-yellow-400 bg-yellow-900/30' :
+                                'text-slate-400 bg-slate-800'
+                              }`}>
+                                {user.compatibilityScore}%
                               </div>
                             </div>
-                          </div>
-                          <div className={`px-2 py-1 rounded text-xs font-semibold ${
-                            user.compatibilityScore >= 80 ? 'text-emerald-400 bg-emerald-900/30' :
-                            user.compatibilityScore >= 60 ? 'text-blue-400 bg-blue-900/30' :
-                            user.compatibilityScore >= 40 ? 'text-yellow-400 bg-yellow-900/30' :
-                            'text-slate-400 bg-slate-800'
-                          }`}>
-                            {user.compatibilityScore}%
-                          </div>
-                        </div>
-                        
-                        {user.bio && (
-                          <p className="text-xs text-slate-400 mb-2 line-clamp-2">{user.bio}</p>
-                        )}
-                        
-                        {user.interests.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-2">
-                            {user.interests.slice(0, 3).map((interest, idx) => (
-                              <span key={idx} className="text-xs bg-emerald-900/30 text-emerald-400 px-2 py-0.5 rounded">
-                                {interest}
-                              </span>
-                            ))}
-                            {user.interests.length > 3 && (
-                              <span className="text-xs text-slate-500">+{user.interests.length - 3}</span>
+                            
+                            {user.bio && (
+                              <p className="text-xs text-slate-400 mb-2 line-clamp-2">{user.bio}</p>
                             )}
+                            
+                            {user.interests.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {user.interests.slice(0, 3).map((interest, idx) => (
+                                  <span key={idx} className="text-xs bg-emerald-900/30 text-emerald-400 px-2 py-0.5 rounded">
+                                    {interest}
+                                  </span>
+                                ))}
+                                {user.interests.length > 3 && (
+                                  <span className="text-xs text-slate-500">+{user.interests.length - 3}</span>
+                                )}
+                              </div>
+                            )}
+                            
+                            <div className="text-xs text-slate-500 mb-2">
+                              {user.sharedCourses.length} shared {user.sharedCourses.length === 1 ? 'course' : 'courses'}
+                            </div>
+                            
+                            <div className="flex gap-2 mt-3">
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  router.push(`/community/messages?userId=${user.userID}`);
+                                }}
+                                className="flex-1 bg-blue-600 text-white py-1.5 px-3 rounded-lg text-xs font-medium hover:bg-blue-500 transition-colors text-center cursor-pointer relative z-10"
+                                type="button"
+                              >
+                                Message
+                              </button>
+                              <Link
+                                href={`/profile/${user.username}`}
+                                className="flex-1 bg-slate-700 text-white py-1.5 px-3 rounded-lg text-xs font-medium hover:bg-slate-600 transition-colors text-center"
+                              >
+                                View
+                              </Link>
+                            </div>
                           </div>
-                        )}
-                        
-                        {user.sharedCourses.length > 0 && (
-                          <div className="text-xs text-slate-500 mb-2">
-                            {user.sharedCourses.length} shared {user.sharedCourses.length === 1 ? 'course' : 'courses'}
-                          </div>
-                        )}
-                        
-                        <div className="flex gap-2 mt-3">
-                          <Link
-                            href={`/community/messages?userId=${user.userID}`}
-                            className="flex-1 bg-blue-600 text-white py-1.5 px-3 rounded-lg text-xs font-medium hover:bg-blue-500 transition-colors text-center"
-                          >
-                            Message
-                          </Link>
-                          <Link
-                            href={`/profile/${user.username}`}
-                            className="flex-1 bg-slate-700 text-white py-1.5 px-3 rounded-lg text-xs font-medium hover:bg-slate-600 transition-colors text-center"
-                          >
-                            View
-                          </Link>
+                          {index < Math.min(recommendedUsers.length, 3) - 1 && (
+                            <div className="border-t border-white/10"></div>
+                          )}
                         </div>
-                      </div>
-                      {index < recommendedUsers.length - 1 && (
-                        <div className="border-t border-white/10"></div>
-                      )}
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  )}
 
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    try {
-                      // Use router.push for client-side navigation
-                      router.push('/community');
-                    } catch (error) {
-                      console.error('Navigation error:', error);
-                      // Fallback to window location
-                      window.location.href = '/community';
-                    }
-                  }}
-                  className="mt-4 w-full py-2 text-center text-emerald-400 hover:text-emerald-300 text-sm font-medium transition-colors cursor-pointer relative z-10"
-                  type="button"
-                >
-                  View All Recommendations →
-                </button>
+                  {/* Study Groups Section - Below Study Buddies */}
+                  {groupsLoading && recommendedGroups.length === 0 && (
+                    <div className="py-4 text-center">
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-400 mx-auto mb-2" />
+                      <p className="text-xs text-slate-400">Loading study groups...</p>
+                    </div>
+                  )}
+                  {recommendedGroups.length > 0 && (
+                    <div>
+                      {recommendedUsers.length > 0 && (
+                        <div className="border-t border-white/10 mb-4 mt-4"></div>
+                      )}
+                      <h3 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">Study Groups</h3>
+                      {recommendedGroups.slice(0, 2).map((group, index) => (
+                        <div key={group.groupId}>
+                          <div className="py-3">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-semibold text-white text-sm truncate mb-1">{group.name}</h4>
+                                {group.description && (
+                                  <p className="text-xs text-slate-400 mb-2 line-clamp-2">{group.description}</p>
+                                )}
+                                <div className="flex items-center gap-2 text-xs text-slate-400">
+                                  <Users size={12} />
+                                  <span>{group.memberCount} {group.memberCount === 1 ? 'member' : 'members'}</span>
+                                  {group.tagName && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="text-emerald-400">{group.tagName}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleJoinGroup(group.groupId);
+                              }}
+                              disabled={joiningGroupId === group.groupId}
+                              className="mt-3 block w-full bg-emerald-600 text-white py-1.5 px-3 rounded-lg text-xs font-medium hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-center cursor-pointer relative z-10 flex items-center justify-center gap-2"
+                              type="button"
+                            >
+                              {joiningGroupId === group.groupId ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  <span>Joining...</span>
+                                </>
+                              ) : (
+                                <span>Join Group</span>
+                              )}
+                            </button>
+                          </div>
+                          {index < Math.min(recommendedGroups.length, 2) - 1 && (
+                            <div className="border-t border-white/10"></div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </motion.aside>

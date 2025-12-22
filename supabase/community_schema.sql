@@ -330,8 +330,6 @@ CREATE TABLE IF NOT EXISTS study_groups (
     "CreatorID" INT NOT NULL REFERENCES public."USER"("UserID") ON DELETE CASCADE,
     "CreatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     "UpdatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    -- Ensure only one public group per tag
-    CONSTRAINT unique_public_group_per_tag UNIQUE NULLS NOT DISTINCT ("TagID", "Type"),
     -- Public groups must have a TagID, private groups must not
     CHECK (
         ("Type" = 'public' AND "TagID" IS NOT NULL) OR
@@ -537,6 +535,11 @@ CREATE POLICY "Users can update their own read status" ON group_message_reads
 CREATE INDEX IF NOT EXISTS idx_study_groups_type ON study_groups("Type");
 CREATE INDEX IF NOT EXISTS idx_study_groups_tag ON study_groups("TagID");
 CREATE INDEX IF NOT EXISTS idx_study_groups_creator ON study_groups("CreatorID");
+
+-- Partial unique index: Only one public group per tag (allows unlimited private groups)
+CREATE UNIQUE INDEX IF NOT EXISTS unique_public_group_per_tag 
+ON study_groups ("TagID", "Type") 
+WHERE "Type" = 'public';
 
 CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members("GroupID");
 CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members("UserID");

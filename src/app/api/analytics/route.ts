@@ -4,7 +4,7 @@ import { getDatabase } from '@/lib/mongodb/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getUserIdFromSession } from '@/lib/utils/getUserId';
 
-// GET /api/analytics - 獲取分析數據（所有登入用戶都可以訪問）
+// GET /api/analytics - 獲取分析數據（僅限 admin 用戶訪問）
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
