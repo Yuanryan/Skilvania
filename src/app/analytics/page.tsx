@@ -17,6 +17,8 @@ export default function AnalyticsPage() {
   });
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [seedingGroups, setSeedingGroups] = useState(false);
+  const [seedResult, setSeedResult] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAnalytics();
@@ -45,6 +47,33 @@ export default function AnalyticsPage() {
       setError(err instanceof Error ? err.message : 'Failed to load analytics');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSeedGroups = async () => {
+    if (!confirm('This will create public study groups for all course tags and randomly add users to them. Continue?')) return;
+
+    try {
+      setSeedingGroups(true);
+      setSeedResult(null);
+      
+      const response = await fetch('/api/admin/seed-groups', {
+        method: 'POST'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to seed groups');
+      }
+
+      const result = await response.json();
+      const usersMsg = result.usersAdded > 0 ? ` Added ${result.usersAdded} users to groups.` : '';
+      setSeedResult(`✓ Success! Created ${result.created} new groups. ${result.existing} already existed.${usersMsg} Total: ${result.total} tags processed.`);
+    } catch (err) {
+      console.error('Error seeding groups:', err);
+      setSeedResult(`✗ Error: ${err instanceof Error ? err.message : 'Failed to seed groups'}`);
+    } finally {
+      setSeedingGroups(false);
     }
   };
 
@@ -470,6 +499,43 @@ function UserActivityView({ data }: { data: any }) {
             )}
           </div>
         )}
+
+        {/* Admin Tools Section */}
+        <div className="mt-12 border-t border-white/10 pt-8">
+          <h2 className="text-2xl font-bold text-white mb-6">Admin Tools</h2>
+          
+          <div className="bg-slate-900/50 border border-white/10 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-white mb-2">Study Groups Management</h3>
+            <p className="text-sm text-slate-400 mb-4">
+              Create public study groups for all course tags. Each tag will get its own public group that users can freely join. Random users will be automatically added to each group (5 per group by default).
+            </p>
+            
+            <button
+              onClick={handleSeedGroups}
+              disabled={seedingGroups}
+              className="px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+            >
+              {seedingGroups ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Creating Groups...</span>
+                </>
+              ) : (
+                <span>Seed Study Groups from Tags</span>
+              )}
+            </button>
+            
+            {seedResult && (
+              <div className={`mt-4 p-4 rounded-lg ${
+                seedResult.startsWith('✓') 
+                  ? 'bg-emerald-900/20 border border-emerald-500/30 text-emerald-400'
+                  : 'bg-red-900/20 border border-red-500/30 text-red-400'
+              }`}>
+                {seedResult}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
