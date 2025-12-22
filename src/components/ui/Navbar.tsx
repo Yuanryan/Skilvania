@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Sparkles, Layout, Map, User as UserIcon, PlusCircle, LogOut, BarChart3 } from "lucide-react";
+import { Sparkles, Layout, Map, User as UserIcon, PlusCircle, LogOut, BarChart3, Users, MessageCircle, UserPlus } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -12,6 +12,8 @@ export function Navbar() {
   const { data: session, status } = useSession();
   const [username, setUsername] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [pendingConnections, setPendingConnections] = useState(0);
   const router = useRouter();
   const loading = status === "loading";
 
@@ -55,6 +57,36 @@ export function Navbar() {
     fetchUsername();
     checkAdminStatus();
   }, [session]);
+
+  useEffect(() => {
+    if (session?.user) {
+      fetchNotifications();
+      
+      // Poll for notifications every 30 seconds
+      const interval = setInterval(fetchNotifications, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [session]);
+
+  const fetchNotifications = async () => {
+    try {
+      // Fetch unread messages count
+      const messagesRes = await fetch('/api/community/messages');
+      if (messagesRes.ok) {
+        const messagesData = await messagesRes.json();
+        setUnreadMessages(messagesData.unreadCount || 0);
+      }
+
+      // Fetch pending connections count
+      const connectionsRes = await fetch('/api/community/connections');
+      if (connectionsRes.ok) {
+        const connectionsData = await connectionsRes.json();
+        setPendingConnections(connectionsData.counts.pendingReceived || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
+  };
 
   const handleLogout = async () => {
     // 在登出前記錄登出活動（在 session 清除之前）
@@ -102,6 +134,34 @@ export function Navbar() {
                     className="text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-colors"
                 >
                     <Layout size={16} /> Dashboard
+                </Link>
+                <Link 
+                    href="/community" 
+                    className="text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-colors"
+                >
+                    <Users size={16} /> Community
+                </Link>
+                <Link 
+                    href="/community/connections" 
+                    className="text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-colors relative"
+                >
+                    <UserPlus size={16} /> Connections
+                    {pendingConnections > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                        {pendingConnections}
+                      </span>
+                    )}
+                </Link>
+                <Link 
+                    href="/community/messages" 
+                    className="text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-colors relative"
+                >
+                    <MessageCircle size={16} /> Messages
+                    {unreadMessages > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                        {unreadMessages > 9 ? '9+' : unreadMessages}
+                      </span>
+                    )}
                 </Link>
                 <Link 
                     href="/creator" 
