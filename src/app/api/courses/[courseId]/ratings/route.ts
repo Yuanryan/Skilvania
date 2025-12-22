@@ -154,16 +154,31 @@ export async function POST(
     );
 
     if (ratingError) {
-      console.error('Error creating/updating rating:', ratingError);
+      console.error('Error creating/updating rating:', {
+        error: ratingError,
+        code: ratingError.code,
+        message: ratingError.message,
+        details: ratingError.details,
+        hint: ratingError.hint,
+        courseId: courseIdInt,
+        userId: userId,
+        ratingScore: ratingInt
+      });
       return NextResponse.json({ 
         error: 'Failed to save rating',
-        details: ratingError.message 
+        details: ratingError.message || 'Unknown error occurred'
       }, { status: 500 });
     }
 
     if (!rating) {
+      console.error('Rating operation returned no data and no error', {
+        courseId: courseIdInt,
+        userId: userId,
+        ratingScore: ratingInt
+      });
       return NextResponse.json({ 
-        error: 'Failed to save rating' 
+        error: 'Failed to save rating',
+        details: 'No data returned from database operation'
       }, { status: 500 });
     }
 

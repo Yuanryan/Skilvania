@@ -96,9 +96,12 @@ export async function safeUpsert<T>(
       }
     });
     
-    // 添加 UpdatedAt 时间戳
-    if (updateData.UpdatedAt === undefined) {
-      updateData.UpdatedAt = new Date().toISOString();
+    // 只有在数据中明确包含 UpdatedAt 时才添加时间戳
+    // 或者如果 updateFields 中包含了 UpdatedAt
+    if (data.UpdatedAt !== undefined || (updateFields && updateFields.includes('UpdatedAt'))) {
+      if (updateData.UpdatedAt === undefined) {
+        updateData.UpdatedAt = new Date().toISOString();
+      }
     }
     
     const updateQuery = Array.isArray(uniqueKey)
@@ -109,11 +112,15 @@ export async function safeUpsert<T>(
     return { data: updated as T, error: updateError };
   } else {
     // 插入新记录
-    const insertData = {
-      ...data,
-      CreatedAt: data.CreatedAt || new Date().toISOString(),
-      UpdatedAt: data.UpdatedAt || new Date().toISOString(),
-    };
+    const insertData: any = { ...data };
+    
+    // 只有在数据中明确包含这些字段时才添加时间戳
+    if (data.CreatedAt !== undefined) {
+      insertData.CreatedAt = data.CreatedAt || new Date().toISOString();
+    }
+    if (data.UpdatedAt !== undefined) {
+      insertData.UpdatedAt = data.UpdatedAt || new Date().toISOString();
+    }
     
     const { data: inserted, error: insertError } = await supabase
       .from(table)
