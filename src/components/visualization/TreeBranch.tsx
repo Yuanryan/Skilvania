@@ -35,45 +35,16 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
 
   // In Creator Mode, we want solid lines that update instantly, no fancy growth animation
   if (isCreatorMode) {
+    // Use the completed palette for creator mode to mirror finished-state styling
     return (
-      <g>
-        {/* Base static line */}
-        <path 
-          d={path} 
-          stroke="#475569" 
-          strokeWidth={thickness} 
-          strokeLinecap="round" 
-          fill="none" 
-          className="opacity-30"
-        />
-        
-        {/* Animated Flowing Segment */}
-        <path 
-          d={path} 
-          stroke="#94a3b8" // Lighter slate color for visibility
-          strokeWidth={thickness} 
-          strokeLinecap="round" 
-          fill="none" 
-          className="opacity-20"
-          style={{
-            strokeDasharray: `200 ${length}`, // Short segment (20px) followed by gap
-            strokeDashoffset: length,
-            animation: 'flowSegment 2s linear infinite',
-          }}
-        />
-        
-        {/* Define the Keyframes in a style tag locally or ensure it exists globally */}
-        <style jsx global>{`
-          @keyframes flowSegment {
-            from {
-              stroke-dashoffset: ${length};
-            }
-            to {
-              stroke-dashoffset: 0;
-            }
-          }
-        `}</style>
-      </g>
+      <path 
+        d={path} 
+        stroke="#10b981" 
+        strokeWidth={thickness} 
+        strokeLinecap="round" 
+        fill="none" 
+        className="opacity-80"
+      />
     );
   }
 

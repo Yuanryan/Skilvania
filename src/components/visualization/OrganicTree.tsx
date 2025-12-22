@@ -17,6 +17,11 @@ interface OrganicTreeProps {
   onBackgroundClick?: () => void;
   scale?: number;
   disableTransition?: boolean;
+  /**
+   * If provided, external selection state can be synced.
+   * When absent, OrganicTree manages its own selection state.
+   */
+  externalSelectedNodeId?: string | null;
 }
 
 export const OrganicTree: React.FC<OrganicTreeProps> = ({
@@ -29,9 +34,11 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   onConnect,
   onBackgroundClick,
   scale = 1,
-  disableTransition = false
+  disableTransition = false,
+  externalSelectedNodeId = null
 }) => {
   const BASE_ZOOM = 0.5;
+  const isControlledSelection = externalSelectedNodeId !== null;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   
@@ -115,27 +122,36 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
 
   const handleNodeClick = (node: Node) => {
     if (isCreatorMode) {
-        if (!isDraggingRef.current) {
-            // If we were already selecting a node, maybe we want to connect them?
-            if (selectedNodeId && selectedNodeId !== node.id && onConnect) {
-                onConnect(selectedNodeId, node.id);
-            } else {
-                setSelectedNodeId(node.id);
-            }
-            onNodeClick(node);
+      if (!isDraggingRef.current) {
+        // Creator mode: only select; connection is handled by parent explicitly.
+        if (!isControlledSelection) {
+          setSelectedNodeId(node.id);
         }
-    } else {
-        setSelectedNodeId(node.id);
         onNodeClick(node);
+      }
+    } else {
+      if (!isControlledSelection) {
+        setSelectedNodeId(node.id);
+      }
+      onNodeClick(node);
     }
   };
 
   const handleBackgroundClick = () => {
-    setSelectedNodeId(null);
+    if (!isControlledSelection) {
+      setSelectedNodeId(null);
+    }
     if (onBackgroundClick) {
       onBackgroundClick();
     }
   };
+
+  // Sync selection when external selection changes
+  useEffect(() => {
+    if (isControlledSelection) {
+      setSelectedNodeId(externalSelectedNodeId ?? null);
+    }
+  }, [externalSelectedNodeId]);
 
   return (
     <div 

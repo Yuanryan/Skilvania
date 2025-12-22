@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { OrganicTree } from '@/components/visualization/OrganicTree';
 import { Node, Edge } from '@/types';
-import { Save, Plus, Trash2, ArrowLeft, Settings, Loader2 } from 'lucide-react';
+import { Save, Plus, Trash2, ArrowLeft, Settings, Loader2, Link2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LessonEditorDrawer } from '@/components/creator/LessonEditorDrawer';
@@ -21,6 +21,8 @@ export default function CreatorEditorPage() {
   const [courseTitle, setCourseTitle] = useState('');
   const [drawerWidth, setDrawerWidth] = useState(50);
   const [isResizing, setIsResizing] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectSourceId, setConnectSourceId] = useState<string | null>(null);
 
   // --- LOAD DATA ---
   useEffect(() => {
@@ -391,6 +393,29 @@ export default function CreatorEditorPage() {
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
 
+  const handleTreeNodeClick = (node: Node) => {
+    if (isConnecting && connectSourceId) {
+      if (node.id !== connectSourceId) {
+        handleConnect(connectSourceId, node.id);
+      }
+      // Keep the source selected (or clear) instead of selecting the target
+      setIsConnecting(false);
+      setConnectSourceId(null);
+      setSelectedNodeId(connectSourceId);
+      return;
+    }
+    setSelectedNodeId(node.id);
+  };
+
+  const startConnection = () => {
+    if (!selectedNodeId) {
+      alert('請先選取來源節點，再新增連線。');
+      return;
+    }
+    setIsConnecting(true);
+    setConnectSourceId(selectedNodeId);
+  };
+
   return (
     <div className="h-screen bg-slate-950 flex flex-col overflow-hidden">
       
@@ -409,6 +434,19 @@ export default function CreatorEditorPage() {
               className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold transition-colors"
             >
                 <Plus size={16} /> Add Node
+            </button>
+            <button 
+              onClick={startConnection}
+              disabled={!selectedNodeId}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${
+                !selectedNodeId
+                  ? 'bg-slate-800/60 text-slate-400 border border-slate-700 cursor-not-allowed'
+                  : isConnecting 
+                    ? 'bg-emerald-700 text-white border border-emerald-400/50' 
+                    : 'bg-emerald-900/60 hover:bg-emerald-700 text-emerald-200 border border-emerald-500/30'
+              }`}
+            >
+                <Link2 size={16} /> {isConnecting ? 'Select target…' : 'Link / Unlink'}
             </button>
             <button 
               disabled={!selectedNodeId} 
@@ -463,12 +501,16 @@ export default function CreatorEditorPage() {
                 edges={edges}
                 completedNodes={new Set()} // Creator mode ignores completed status
                 isCreatorMode={true}
-                onNodeClick={(node) => setSelectedNodeId(node.id)}
-                onBackgroundClick={() => setSelectedNodeId(null)}
+                onNodeClick={handleTreeNodeClick}
+                onBackgroundClick={() => {
+                  setSelectedNodeId(null);
+                  setIsConnecting(false);
+                  setConnectSourceId(null);
+                }}
                 onNodeDrag={handleNodeDrag}
-                onConnect={handleConnect}
                 scale={selectedNodeId ? Math.max(0.5, 1 - (drawerWidth / 150)) : 1}
                 disableTransition={isResizing}
+                externalSelectedNodeId={selectedNodeId}
               />
             )}
         </div>
