@@ -4,10 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { Navbar } from '@/components/ui/Navbar';
 import { OrganicTree } from '@/components/visualization/OrganicTree';
 import { Node, Edge } from '@/types';
-import { BookOpen, CheckCircle, Sparkles, X, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { logUserActivity } from '@/lib/utils/activityLogger';
+import { LessonDrawer } from '@/components/course/LessonDrawer';
 
 export default function TreePage() {
   const params = useParams();
@@ -19,6 +20,9 @@ export default function TreePage() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Drawer state
+  const [drawerWidth, setDrawerWidth] = useState<number>(66.666);
+  const [isResizing, setIsResizing] = useState(false);
 
   // 從 API 獲取數據
   const fetchTreeData = async () => {
@@ -145,92 +149,47 @@ export default function TreePage() {
     <div className="h-screen bg-deep-forest flex flex-col overflow-hidden">
       <Navbar />
       
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 relative overflow-hidden flex">
         {/* The Tree Canvas */}
-        <OrganicTree 
-          nodes={nodes}
-          edges={edges}
-          completedNodes={completedNodes}
-          isCreatorMode={false}
-          onNodeClick={setSelectedNode}
-        />
+        <div 
+            className={`flex-1 relative ease-in-out ${isResizing ? '' : 'transition-all duration-300'}`}
+            style={{
+                transform: selectedNode ? `translateX(-${drawerWidth / 2}%)` : 'none'
+            }}
+        >
+          <OrganicTree 
+            nodes={nodes}
+            edges={edges}
+            completedNodes={completedNodes}
+            isCreatorMode={false}
+            onNodeClick={setSelectedNode}
+            scale={selectedNode ? Math.max(0.5, 1 - (drawerWidth / 150)) : 1}
+            disableTransition={isResizing}
+          />
+        </div>
 
-        {/* Side Panel for Node Details */}
+        {/* Lesson Drawer */}
         {selectedNode && (
-          <div className="absolute right-0 top-0 bottom-0 w-full md:w-[450px] bg-slate-900/95 backdrop-blur-xl border-l border-white/10 shadow-2xl p-8 flex flex-col animate-slide-in z-40">
-            <button 
-                onClick={() => setSelectedNode(null)} 
-                className="absolute top-6 right-6 text-slate-500 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"
-            >
-                <X size={20} />
-            </button>
-            
-            <div className="flex items-center gap-5 mb-8 mt-4">
-              <div className={`p-5 rounded-2xl shadow-inner border border-white/5 ${completedNodes.has(selectedNode.id) ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                {/* We could dynamically render the icon here too if we imported Lucide icons mapping */}
-                <Sparkles size={32} />
-              </div>
-              <div>
-                <h2 className="font-bold text-3xl text-white leading-tight mb-1">{selectedNode.title}</h2>
-                <div className="text-xs text-slate-400 uppercase tracking-widest font-bold flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${completedNodes.has(selectedNode.id) ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
-                  {selectedNode.type} Node
-                </div>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-              <div className="prose prose-invert prose-lg">
-                <p className="text-slate-300 leading-relaxed">
-                  {selectedNode.description || '這個節點代表你學習旅程中的一個重要里程碑。完成目標以將這些知識融入你的技能樹。'}
-                </p>
-                
-                <div className="my-8 bg-slate-950/50 rounded-2xl p-6 border border-white/5">
-                  <h4 className="text-white font-bold mb-4 text-sm uppercase tracking-wide flex items-center gap-2">
-                    <BookOpen size={16} className="text-emerald-500"/> Learning Objectives
-                  </h4>
-                  <ul className="space-y-4 text-slate-300 list-none pl-0">
-                    <li className="flex gap-4 items-start">
-                        <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-xs font-bold mt-0.5">1</div>
-                        <span>Read the core concepts</span>
-                    </li>
-                    <li className="flex gap-4 items-start">
-                        <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-xs font-bold mt-0.5">2</div>
-                        <span>Complete the interactive quiz</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-6 border-t border-white/10 mt-auto">
-              {completedNodes.has(selectedNode.id) ? (
-                <div className="w-full bg-emerald-900/20 border border-emerald-500/20 text-emerald-400 py-4 rounded-xl flex items-center justify-center gap-3 font-bold cursor-default">
-                  <CheckCircle size={18} /> Knowledge Absorbed
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                    <Link 
-                        href={`/courses/${params.courseId}/learn/${selectedNode.id}`}
-                        className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-4 px-6 rounded-xl transition-all flex items-center justify-center gap-3 border border-slate-700"
-                    >
-                        View Lesson Content <ArrowRight size={18} />
-                    </Link>
-                    
-                    {/* Debug Helper for "Instant Complete" */}
-                    <button 
-                        onClick={() => handleCompleteNode(selectedNode.id)} 
-                        className="w-full text-xs text-slate-600 hover:text-slate-400 py-2"
-                    >
-                        [Debug: Instant Complete]
-                    </button>
-                </div>
-              )}
-            </div>
-          </div>
+          <LessonDrawer 
+            courseId={courseId}
+            nodeId={selectedNode.id}
+            isOpen={true}
+            onClose={() => setSelectedNode(null)}
+            onComplete={() => {
+              setCompletedNodes(prev => {
+                const newSet = new Set(prev);
+                newSet.add(selectedNode.id);
+                return newSet;
+              });
+            }}
+            initialCompleted={completedNodes.has(selectedNode.id)}
+            width={drawerWidth}
+            onWidthChange={setDrawerWidth}
+            onResizeStart={() => setIsResizing(true)}
+            onResizeEnd={() => setIsResizing(false)}
+          />
         )}
       </div>
     </div>
   );
 }
-
