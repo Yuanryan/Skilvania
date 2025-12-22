@@ -18,6 +18,21 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient();
 
+    // 獲取用戶基本信息
+    const { data: userData, error: userError } = await supabase
+      .from('USER')
+      .select('UserID, Username, Email, Level, XP')
+      .eq('UserID', userId)
+      .single();
+
+    if (userError || !userData) {
+      console.error('Error fetching user data:', userError);
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
     // 獲取用戶社群檔案
     const { data: profile, error: profileError } = await supabase
       .from('community_profiles')
@@ -30,6 +45,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         profile: {
           userID: userId,
+          username: userData.Username,
+          email: userData.Email,
+          level: userData.Level,
+          xp: userData.XP,
           bio: null,
           interests: [],
           lookingForBuddy: true,
@@ -51,6 +70,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       profile: {
         userID: profile.UserID,
+        username: userData.Username,
+        email: userData.Email,
+        level: userData.Level,
+        xp: userData.XP,
         bio: profile.Bio,
         interests: profile.Interests || [],
         lookingForBuddy: profile.LookingForBuddy,

@@ -307,3 +307,280 @@ FROM public."USER" u
 LEFT JOIN community_profiles cp ON cp."UserID" = u."UserID";
 
 COMMENT ON VIEW public.user_profile IS 'Combined view of USER base profile with community profile fields';
+
+-- =============================================
+-- Study Groups System
+-- =============================================
+-- This section adds study group functionality including:
+-- - Public groups (one per course tag)
+-- - Private groups (user-created)
+-- - Group membership management
+-- - Group chat messaging
+-- =============================================
+
+-- =============================================
+-- Table 4: study_groups (學習小組)
+-- =============================================
+CREATE TABLE IF NOT EXISTS study_groups (
+    "GroupID" SERIAL PRIMARY KEY,
+    "Name" VARCHAR(100) NOT NULL,
+    "Description" TEXT,
+    "Type" VARCHAR(20) NOT NULL CHECK ("Type" IN ('public', 'private')),
+    "TagID" INT REFERENCES public.tag("TagID") ON DELETE SET NULL,
+    "CreatorID" INT NOT NULL REFERENCES public."USER"("UserID") ON DELETE CASCADE,
+    "CreatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    "UpdatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    -- Ensure only one public group per tag
+    CONSTRAINT unique_public_group_per_tag UNIQUE NULLS NOT DISTINCT ("TagID", "Type"),
+    -- Public groups must have a TagID, private groups must not
+    CHECK (
+        ("Type" = 'public' AND "TagID" IS NOT NULL) OR
+        ("Type" = 'private' AND "TagID" IS NULL)
+    )
+);
+
+-- =============================================
+-- Table 5: group_members (小組成員)
+-- =============================================
+CREATE TABLE IF NOT EXISTS group_members (
+    "MembershipID" SERIAL PRIMARY KEY,
+    "GroupID" INT NOT NULL REFERENCES study_groups("GroupID") ON DELETE CASCADE,
+    "UserID" INT NOT NULL REFERENCES public."USER"("UserID") ON DELETE CASCADE,
+    "Role" VARCHAR(20) NOT NULL DEFAULT 'member' CHECK ("Role" IN ('admin', 'member')),
+    "JoinedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE("GroupID", "UserID")
+);
+
+-- =============================================
+-- Table 6: group_messages (小組訊息)
+-- =============================================
+CREATE TABLE IF NOT EXISTS group_messages (
+    "MessageID" SERIAL PRIMARY KEY,
+    "GroupID" INT NOT NULL REFERENCES study_groups("GroupID") ON DELETE CASCADE,
+    "SenderID" INT NOT NULL REFERENCES public."USER"("UserID") ON DELETE CASCADE,
+    "Content" TEXT NOT NULL CHECK (LENGTH(TRIM("Content")) > 0 AND LENGTH("Content") <= 2000),
+    "CreatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =============================================
+-- Table 7: group_message_reads (小組訊息已讀追蹤)
+-- =============================================
+CREATE TABLE IF NOT EXISTS group_message_reads (
+    "GroupID" INT NOT NULL REFERENCES study_groups("GroupID") ON DELETE CASCADE,
+    "UserID" INT NOT NULL REFERENCES public."USER"("UserID") ON DELETE CASCADE,
+    "LastReadMessageID" INT REFERENCES group_messages("MessageID") ON DELETE SET NULL,
+    "LastReadAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY ("GroupID", "UserID")
+);
+
+-- =============================================
+-- Study Groups - Row Level Security (RLS)
+-- =============================================
+ALTER TABLE study_groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE group_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE group_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE group_message_reads ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Anyone can view public groups" ON study_groups;
+DROP POLICY IF EXISTS "Users can view their private groups" ON study_groups;
+DROP POLICY IF EXISTS "Users can create private groups" ON study_groups;
+DROP POLICY IF EXISTS "Group admins can update groups" ON study_groups;
+DROP POLICY IF EXISTS "Group admins can delete groups" ON study_groups;
+
+DROP POLICY IF EXISTS "Users can view members of their groups" ON group_members;
+DROP POLICY IF EXISTS "Users can join public groups" ON group_members;
+DROP POLICY IF EXISTS "Group admins can manage members" ON group_members;
+DROP POLICY IF EXISTS "Users can leave groups" ON group_members;
+
+DROP POLICY IF EXISTS "Group members can view messages" ON group_messages;
+DROP POLICY IF EXISTS "Group members can send messages" ON group_messages;
+
+DROP POLICY IF EXISTS "Users can view their own read status" ON group_message_reads;
+DROP POLICY IF EXISTS "Users can update their own read status" ON group_message_reads;
+
+-- study_groups policies
+CREATE POLICY "Anyone can view public groups" ON study_groups
+    FOR SELECT USING ("Type" = 'public');
+
+CREATE POLICY "Users can view their private groups" ON study_groups
+    FOR SELECT USING (
+        "Type" = 'private' AND "GroupID" IN (
+            SELECT "GroupID" FROM group_members
+            WHERE "UserID" IN (
+                SELECT user_id FROM auth_user_bridge
+                WHERE auth_user_id = auth.uid()
+            )
+        )
+    );
+
+CREATE POLICY "Users can create private groups" ON study_groups
+    FOR INSERT WITH CHECK (
+        "Type" = 'private' AND "CreatorID" IN (
+            SELECT user_id FROM auth_user_bridge
+            WHERE auth_user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Group admins can update groups" ON study_groups
+    FOR UPDATE USING (
+        "GroupID" IN (
+            SELECT "GroupID" FROM group_members
+            WHERE "UserID" IN (
+                SELECT user_id FROM auth_user_bridge
+                WHERE auth_user_id = auth.uid()
+            ) AND "Role" = 'admin'
+        )
+    );
+
+CREATE POLICY "Group admins can delete groups" ON study_groups
+    FOR DELETE USING (
+        "GroupID" IN (
+            SELECT "GroupID" FROM group_members
+            WHERE "UserID" IN (
+                SELECT user_id FROM auth_user_bridge
+                WHERE auth_user_id = auth.uid()
+            ) AND "Role" = 'admin'
+        )
+    );
+
+-- group_members policies
+CREATE POLICY "Users can view members of their groups" ON group_members
+    FOR SELECT USING (
+        "GroupID" IN (
+            SELECT gm."GroupID" FROM group_members gm
+            WHERE gm."UserID" IN (
+                SELECT user_id FROM auth_user_bridge
+                WHERE auth_user_id = auth.uid()
+            )
+        ) OR "GroupID" IN (
+            SELECT "GroupID" FROM study_groups WHERE "Type" = 'public'
+        )
+    );
+
+CREATE POLICY "Users can join public groups" ON group_members
+    FOR INSERT WITH CHECK (
+        "GroupID" IN (SELECT "GroupID" FROM study_groups WHERE "Type" = 'public')
+        AND "UserID" IN (
+            SELECT user_id FROM auth_user_bridge
+            WHERE auth_user_id = auth.uid()
+        )
+        AND "Role" = 'member'
+    );
+
+CREATE POLICY "Group admins can manage members" ON group_members
+    FOR ALL USING (
+        "GroupID" IN (
+            SELECT "GroupID" FROM group_members
+            WHERE "UserID" IN (
+                SELECT user_id FROM auth_user_bridge
+                WHERE auth_user_id = auth.uid()
+            ) AND "Role" = 'admin'
+        )
+    );
+
+CREATE POLICY "Users can leave groups" ON group_members
+    FOR DELETE USING (
+        "UserID" IN (
+            SELECT user_id FROM auth_user_bridge
+            WHERE auth_user_id = auth.uid()
+        )
+    );
+
+-- group_messages policies
+CREATE POLICY "Group members can view messages" ON group_messages
+    FOR SELECT USING (
+        "GroupID" IN (
+            SELECT "GroupID" FROM group_members
+            WHERE "UserID" IN (
+                SELECT user_id FROM auth_user_bridge
+                WHERE auth_user_id = auth.uid()
+            )
+        )
+    );
+
+CREATE POLICY "Group members can send messages" ON group_messages
+    FOR INSERT WITH CHECK (
+        "GroupID" IN (
+            SELECT "GroupID" FROM group_members
+            WHERE "UserID" IN (
+                SELECT user_id FROM auth_user_bridge
+                WHERE auth_user_id = auth.uid()
+            )
+        )
+        AND "SenderID" IN (
+            SELECT user_id FROM auth_user_bridge
+            WHERE auth_user_id = auth.uid()
+        )
+    );
+
+-- group_message_reads policies
+CREATE POLICY "Users can view their own read status" ON group_message_reads
+    FOR SELECT USING (
+        "UserID" IN (
+            SELECT user_id FROM auth_user_bridge
+            WHERE auth_user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can update their own read status" ON group_message_reads
+    FOR ALL USING (
+        "UserID" IN (
+            SELECT user_id FROM auth_user_bridge
+            WHERE auth_user_id = auth.uid()
+        )
+    );
+
+-- =============================================
+-- Study Groups - Indexes for Performance
+-- =============================================
+CREATE INDEX IF NOT EXISTS idx_study_groups_type ON study_groups("Type");
+CREATE INDEX IF NOT EXISTS idx_study_groups_tag ON study_groups("TagID");
+CREATE INDEX IF NOT EXISTS idx_study_groups_creator ON study_groups("CreatorID");
+
+CREATE INDEX IF NOT EXISTS idx_group_members_group ON group_members("GroupID");
+CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members("UserID");
+CREATE INDEX IF NOT EXISTS idx_group_members_role ON group_members("Role");
+
+CREATE INDEX IF NOT EXISTS idx_group_messages_group ON group_messages("GroupID");
+CREATE INDEX IF NOT EXISTS idx_group_messages_sender ON group_messages("SenderID");
+CREATE INDEX IF NOT EXISTS idx_group_messages_created ON group_messages("CreatedAt");
+
+CREATE INDEX IF NOT EXISTS idx_group_message_reads_user ON group_message_reads("UserID");
+
+-- =============================================
+-- Study Groups - Triggers
+-- =============================================
+-- Auto-update timestamps for study groups
+DROP TRIGGER IF EXISTS update_study_groups_timestamp ON study_groups;
+CREATE TRIGGER update_study_groups_timestamp
+    BEFORE UPDATE ON study_groups
+    FOR EACH ROW EXECUTE FUNCTION update_community_timestamp();
+
+-- Auto-add creator as admin when group is created
+CREATE OR REPLACE FUNCTION add_creator_as_admin()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO group_members ("GroupID", "UserID", "Role")
+    VALUES (NEW."GroupID", NEW."CreatorID", 'admin');
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS add_creator_as_admin_trigger ON study_groups;
+CREATE TRIGGER add_creator_as_admin_trigger
+    AFTER INSERT ON study_groups
+    FOR EACH ROW EXECUTE FUNCTION add_creator_as_admin();
+
+-- =============================================
+-- Study Groups - Comments for Documentation
+-- =============================================
+COMMENT ON TABLE study_groups IS '學習小組 - Study groups (public tag-based or private)';
+COMMENT ON TABLE group_members IS '小組成員 - Group membership and roles';
+COMMENT ON TABLE group_messages IS '小組訊息 - Messages in study groups';
+COMMENT ON TABLE group_message_reads IS '小組訊息已讀追蹤 - Track read status per user per group';
+
+COMMENT ON COLUMN study_groups."Type" IS '小組類型 - Group type (public/private)';
+COMMENT ON COLUMN study_groups."TagID" IS '課程標籤 - Course tag for public groups';
+COMMENT ON COLUMN group_members."Role" IS '成員角色 - Member role (admin/member)';
+COMMENT ON COLUMN group_message_reads."LastReadMessageID" IS '最後已讀訊息 - Last message read by user';
