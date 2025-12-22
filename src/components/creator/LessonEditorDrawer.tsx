@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, ArrowRight, Settings, FileText, Loader2, Save, Edit3, Eye, CheckCircle2 } from 'lucide-react';
+import { X, ArrowRight, Loader2, Save, Edit3, Eye, CheckCircle2 } from 'lucide-react';
 import { parseContent, ContentBlock } from '@/types/content';
 import { Node, NodeType } from '@/types';
 import BlockEditor from '@/components/content/BlockEditor';
@@ -33,7 +33,7 @@ export function LessonEditorDrawer({
   onResizeStart,
   onResizeEnd
 }: LessonEditorDrawerProps) {
-  const [activeTab, setActiveTab] = useState<'settings' | 'content'>('settings');
+  // const [activeTab, setActiveTab] = useState<'settings' | 'content'>('settings'); // Removed tab state
   const isResizingRef = useRef(false);
 
   // --- Content Editor State ---
@@ -235,48 +235,27 @@ export function LessonEditorDrawer({
 
        {/* Header */}
        <div className="flex items-center justify-between p-4 border-b border-white/10 bg-slate-900/50">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-1 mr-4">
              <button 
                 onClick={onClose}
                 className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
              >
                 <ArrowRight size={20} />
              </button>
-             <div>
+             <div className="flex-1">
                 <div className="text-xs text-emerald-500 font-bold uppercase tracking-wider mb-1">
                    Lesson Editor
                 </div>
-                <h2 className="text-lg font-bold text-white max-w-[200px] sm:max-w-md truncate">
-                  {localSettings.title || 'Untitled Node'}
-                </h2>
+                <input 
+                  value={localSettings.title || ''} 
+                  onChange={(e) => handleSettingChange('title', e.target.value)}
+                  className="bg-transparent text-lg font-bold text-white w-full border-none focus:outline-none focus:ring-0 p-0 placeholder-slate-600"
+                  placeholder="Untitled Node"
+                />
              </div>
           </div>
           
           <div className="flex items-center gap-2">
-            {/* Tabs */}
-            <div className="bg-slate-800/50 p-1 rounded-lg flex items-center gap-1 mr-4">
-              <button
-                onClick={() => setActiveTab('settings')}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-2 ${
-                  activeTab === 'settings' 
-                    ? 'bg-slate-700 text-white shadow-sm' 
-                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                }`}
-              >
-                <Settings size={14} /> Settings
-              </button>
-              <button
-                onClick={() => setActiveTab('content')}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-2 ${
-                  activeTab === 'content' 
-                    ? 'bg-emerald-600 text-white shadow-sm' 
-                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                }`}
-              >
-                <FileText size={14} /> Content
-              </button>
-            </div>
-
             <button 
                 onClick={onClose} 
                 className="text-slate-500 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"
@@ -289,95 +268,65 @@ export function LessonEditorDrawer({
        {/* Body */}
        <div className="flex-1 overflow-hidden flex flex-col relative">
           
-          {/* Settings Tab */}
-          {activeTab === 'settings' && (
-             <div className="p-8 max-w-2xl mx-auto w-full overflow-y-auto custom-scrollbar">
-                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                  <Settings className="text-emerald-500" size={24} /> 
-                  Node Properties
-                </h3>
-                
-                <div className="space-y-6 bg-slate-800/30 p-6 rounded-xl border border-white/5">
-                    <div>
-                      <label className="text-xs uppercase text-slate-400 font-bold block mb-2">Title</label>
-                      <input 
-                        value={localSettings.title || ''} 
-                        onChange={(e) => handleSettingChange('title', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-emerald-500 focus:outline-none transition-colors"
-                        placeholder="Enter lesson title..."
-                      />
+          <div className="flex-1 flex flex-col h-full bg-slate-950">
+               {/* Content Toolbar */}
+               <div className="bg-slate-900 border-b border-white/5 px-4 py-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1 border border-slate-700">
+                      <button
+                        onClick={() => setViewMode('edit')}
+                        className={`px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1 ${
+                          viewMode === 'edit' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Edit3 size={14} /> Edit
+                      </button>
+                      <button
+                        onClick={() => setViewMode('split')}
+                        className={`px-3 py-1.5 rounded text-xs font-bold transition-colors ${
+                          viewMode === 'split' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        Split
+                      </button>
+                      <button
+                        onClick={() => setViewMode('preview')}
+                        className={`px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1 ${
+                          viewMode === 'preview' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Eye size={14} /> Preview
+                      </button>
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-xs uppercase text-slate-400 font-bold block mb-2">Type</label>
-                        <select 
+
+                    <div className="h-6 w-[1px] bg-slate-700"></div>
+
+                    {/* Properties Integration */}
+                    <div className="flex items-center gap-2">
+                       <select 
                           value={localSettings.type || 'theory'}
                           onChange={(e) => handleSettingChange('type', e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-emerald-500 focus:outline-none transition-colors appearance-none"
+                          className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
                         >
-                          <option value="theory">Theory (Reading)</option>
-                          <option value="code">Code Challenge</option>
+                          <option value="theory">Theory</option>
+                          <option value="code">Code</option>
                           <option value="project">Project</option>
                           <option value="guide">Guide</option>
                           <option value="tutorial">Tutorial</option>
                           <option value="checklist">Checklist</option>
                           <option value="resource">Resource</option>
                         </select>
-                      </div>
-                      <div>
-                        <label className="text-xs uppercase text-slate-400 font-bold block mb-2">XP Reward</label>
-                        <input 
-                          type="number"
-                          value={localSettings.xp || 0} 
-                          onChange={(e) => handleSettingChange('xp', parseInt(e.target.value) || 0)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-emerald-500 focus:outline-none transition-colors"
-                        />
-                      </div>
+                        
+                        <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5">
+                           <span className="text-[10px] text-slate-400 font-bold uppercase">XP</span>
+                           <input 
+                              type="number"
+                              value={localSettings.xp || 0} 
+                              onChange={(e) => handleSettingChange('xp', parseInt(e.target.value) || 0)}
+                              className="bg-transparent text-xs text-white w-12 focus:outline-none"
+                            />
+                        </div>
                     </div>
-
-                    <div className="pt-6 border-t border-white/10">
-                       <button 
-                         onClick={() => setActiveTab('content')}
-                         className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
-                       >
-                         <Edit3 size={18} /> Edit Lesson Content
-                       </button>
-                    </div>
-                </div>
-             </div>
-          )}
-
-          {/* Content Tab */}
-          {activeTab === 'content' && (
-            <div className="flex-1 flex flex-col h-full bg-slate-950">
-               {/* Content Toolbar */}
-               <div className="bg-slate-900 border-b border-white/5 px-4 py-2 flex items-center justify-between">
-                  <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1 border border-slate-700">
-                    <button
-                      onClick={() => setViewMode('edit')}
-                      className={`px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1 ${
-                        viewMode === 'edit' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <Edit3 size={14} /> Edit
-                    </button>
-                    <button
-                      onClick={() => setViewMode('split')}
-                      className={`px-3 py-1.5 rounded text-xs font-bold transition-colors ${
-                        viewMode === 'split' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Split
-                    </button>
-                    <button
-                      onClick={() => setViewMode('preview')}
-                      className={`px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-1 ${
-                        viewMode === 'preview' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <Eye size={14} /> Preview
-                    </button>
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -442,10 +391,10 @@ export function LessonEditorDrawer({
                   </div>
                )}
             </div>
-          )}
+          </div>
 
        </div>
-    </div>
+
   );
 }
 

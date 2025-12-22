@@ -56,7 +56,7 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
           fill="none" 
           className="opacity-20"
           style={{
-            strokeDasharray: `20 ${length}`, // Short segment (20px) followed by gap
+            strokeDasharray: `200 ${length}`, // Short segment (20px) followed by gap
             strokeDashoffset: length,
             animation: 'flowSegment 2s linear infinite',
           }}
