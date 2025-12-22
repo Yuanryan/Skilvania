@@ -4,9 +4,8 @@ import Link from 'next/link';
 import { Sparkles, ArrowRight, Users, Search, Loader2, AlertCircle, TrendingUp, RefreshCw } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import { StartButton } from '@/components/landing/StartButton';
-import BuddyCard from '@/components/community/BuddyCard';
 import { useState, useEffect, useRef } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Import from courses page
@@ -177,6 +176,7 @@ const BranchingLines = () => {
 
 export default function LandingPage() {
   const pathname = usePathname();
+  const router = useRouter();
   const exploreRef = useRef<HTMLElement>(null);
   const [showAnimation, setShowAnimation] = useState(false);
   const [hasEnteredExplore, setHasEnteredExplore] = useState(false);
@@ -330,18 +330,38 @@ export default function LandingPage() {
     const handleScrollToPosition = () => {
       const hash = window.location.hash;
       
-      // Small delay to ensure page is rendered
-      setTimeout(() => {
-        if (hash === '#explore') {
-          // Scroll to explore section with slower smooth scroll
-          smoothScrollTo(exploreRef.current, 1000);
-          setHasEnteredExplore(true);
-        } else {
-          // Scroll to top of landing page
-          window.scrollTo({ top: 0, behavior: 'instant' });
-          setHasEnteredExplore(false);
-        }
-      }, 100);
+      if (hash === '#explore') {
+        // Set hasEnteredExplore to show navbar
+        setHasEnteredExplore(true);
+        
+        // Wait for DOM to update with navbar, then scroll
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              if (exploreRef.current) {
+                // Use scrollIntoView to position the section
+                // This positions the border-t line right below the navbar
+                exploreRef.current.scrollIntoView({ 
+                  behavior: 'instant',
+                  block: 'start'
+                });
+                
+                // Adjust scroll position to account for fixed navbar (64px)
+                const currentScroll = window.scrollY || window.pageYOffset;
+                const navbarHeight = 64;
+                window.scrollTo({
+                  top: currentScroll - navbarHeight,
+                  behavior: 'instant'
+                });
+              }
+            }, 50);
+          });
+        });
+      } else {
+        // Scroll to top of landing page
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        setHasEnteredExplore(false);
+      }
     };
 
     // Handle initial load
@@ -473,7 +493,11 @@ export default function LandingPage() {
       </section>
 
       {/* Explore Section */}
-      <section id="explore" ref={exploreRef} className={`relative py-20 border-t border-white/5 ${hasEnteredExplore ? 'pt-32' : ''}`}>
+      <section 
+        id="explore" 
+        ref={exploreRef} 
+        className="relative border-t border-white/5 pt-32 pb-20"
+      >
         {showAnimation && <BranchingLines />}
         
         <div className="max-w-7xl mx-auto w-full px-6 pr-0 lg:pr-[calc(20rem+2rem)] xl:pr-[calc(24rem+2rem)] relative z-10">
@@ -513,12 +537,19 @@ export default function LandingPage() {
                         <p className="text-slate-400 text-sm">Popular courses updated recently ({trendingCourses.length})</p>
                       </div>
                     </div>
-                    <Link 
-                      href="/#explore"
+                    <button 
+                      onClick={() => {
+                        // Scroll to categories section
+                        const categoriesSection = document.querySelector('[data-section="categories"]');
+                        if (categoriesSection) {
+                          categoriesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }}
                       className="text-emerald-400 hover:text-emerald-300 text-sm font-medium flex items-center gap-1"
                     >
                       View All
-                    </Link>
+                      <ArrowRight size={16} />
+                    </button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {trendingCourses.map(course => (
@@ -576,7 +607,7 @@ export default function LandingPage() {
 
               {/* Courses by Tags */}
               {!isSearching && Object.keys(coursesByTag).length > 0 && (
-                <section>
+                <section data-section="categories">
                   <div className="flex items-center gap-3 mb-8">
                     <div className="p-2 bg-purple-900/20 rounded-lg border border-purple-500/20">
                       <SparklesIcon className="text-purple-400" size={24} />
@@ -602,9 +633,10 @@ export default function LandingPage() {
                             </h3>
                             <button
                               onClick={() => setSearchQuery(tag)}
-                              className="text-emerald-400 hover:text-emerald-300 text-sm font-medium"
+                              className="text-emerald-400 hover:text-emerald-300 text-sm font-medium flex items-center gap-1"
                             >
                               View All
+                              <ArrowRight size={16} />
                             </button>
                           </div>
                           <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
@@ -657,38 +689,100 @@ export default function LandingPage() {
                       <p className="text-slate-400 text-xs">Study buddies</p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => window.location.reload()}
-                    disabled={usersLoading}
-                    className="text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
-                  >
-                    <RefreshCw size={16} className={usersLoading ? 'animate-spin' : ''} />
-                  </button>
+
                 </div>
                 
-                <div className="space-y-4 max-h-[calc(100vh-250px)] overflow-y-auto pr-2 custom-scrollbar">
-                  {recommendedUsers.map(user => (
-                    <BuddyCard
-                      key={user.userID}
-                      userID={user.userID}
-                      username={user.username}
-                      level={user.level}
-                      xp={user.xp}
-                      bio={user.bio}
-                      interests={user.interests}
-                      sharedCourses={user.sharedCourses}
-                      compatibilityScore={user.compatibilityScore}
-                      onConnectionChange={() => {}}
-                    />
+                <div className="max-h-[calc(100vh-250px)] overflow-y-auto pr-2 custom-scrollbar">
+                  {recommendedUsers.map((user, index) => (
+                    <div key={user.userID}>
+                      <div className="py-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                              {user.username.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-white text-sm truncate">{user.username}</h3>
+                              <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
+                                <span>Level {user.level}</span>
+                                <span>•</span>
+                                <span>{user.xp.toLocaleString()} XP</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className={`px-2 py-1 rounded text-xs font-semibold ${
+                            user.compatibilityScore >= 80 ? 'text-emerald-400 bg-emerald-900/30' :
+                            user.compatibilityScore >= 60 ? 'text-blue-400 bg-blue-900/30' :
+                            user.compatibilityScore >= 40 ? 'text-yellow-400 bg-yellow-900/30' :
+                            'text-slate-400 bg-slate-800'
+                          }`}>
+                            {user.compatibilityScore}%
+                          </div>
+                        </div>
+                        
+                        {user.bio && (
+                          <p className="text-xs text-slate-400 mb-2 line-clamp-2">{user.bio}</p>
+                        )}
+                        
+                        {user.interests.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {user.interests.slice(0, 3).map((interest, idx) => (
+                              <span key={idx} className="text-xs bg-emerald-900/30 text-emerald-400 px-2 py-0.5 rounded">
+                                {interest}
+                              </span>
+                            ))}
+                            {user.interests.length > 3 && (
+                              <span className="text-xs text-slate-500">+{user.interests.length - 3}</span>
+                            )}
+                          </div>
+                        )}
+                        
+                        {user.sharedCourses.length > 0 && (
+                          <div className="text-xs text-slate-500 mb-2">
+                            {user.sharedCourses.length} shared {user.sharedCourses.length === 1 ? 'course' : 'courses'}
+                          </div>
+                        )}
+                        
+                        <div className="flex gap-2 mt-3">
+                          <Link
+                            href={`/community/messages?userId=${user.userID}`}
+                            className="flex-1 bg-blue-600 text-white py-1.5 px-3 rounded-lg text-xs font-medium hover:bg-blue-500 transition-colors text-center"
+                          >
+                            Message
+                          </Link>
+                          <Link
+                            href={`/profile/${user.username}`}
+                            className="flex-1 bg-slate-700 text-white py-1.5 px-3 rounded-lg text-xs font-medium hover:bg-slate-600 transition-colors text-center"
+                          >
+                            View
+                          </Link>
+                        </div>
+                      </div>
+                      {index < recommendedUsers.length - 1 && (
+                        <div className="border-t border-white/10"></div>
+                      )}
+                    </div>
                   ))}
                 </div>
 
-                <Link
-                  href="/community"
-                  className="mt-4 block text-center text-emerald-400 hover:text-emerald-300 text-sm font-medium"
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    try {
+                      // Use router.push for client-side navigation
+                      router.push('/community');
+                    } catch (error) {
+                      console.error('Navigation error:', error);
+                      // Fallback to window location
+                      window.location.href = '/community';
+                    }
+                  }}
+                  className="mt-4 w-full py-2 text-center text-emerald-400 hover:text-emerald-300 text-sm font-medium transition-colors cursor-pointer relative z-10"
+                  type="button"
                 >
                   View All Recommendations →
-                </Link>
+                </button>
               </div>
             </div>
           </motion.aside>

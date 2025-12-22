@@ -13,6 +13,7 @@ export function Navbar() {
   const [username, setUsername] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [unreadGroupMessages, setUnreadGroupMessages] = useState(0);
   const [pendingConnections, setPendingConnections] = useState(0);
   const router = useRouter();
   const loading = status === "loading";
@@ -70,11 +71,18 @@ export function Navbar() {
 
   const fetchNotifications = async () => {
     try {
-      // Fetch unread messages count
+      // Fetch unread DM messages count
       const messagesRes = await fetch('/api/community/messages');
       if (messagesRes.ok) {
         const messagesData = await messagesRes.json();
         setUnreadMessages(messagesData.unreadCount || 0);
+      }
+
+      // Fetch unread group messages count
+      const groupMessagesRes = await fetch('/api/community/groups/unread');
+      if (groupMessagesRes.ok) {
+        const groupMessagesData = await groupMessagesRes.json();
+        setUnreadGroupMessages(groupMessagesData.unreadCount || 0);
       }
 
       // Fetch pending connections count
@@ -140,9 +148,9 @@ export function Navbar() {
                     className="text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-colors relative"
                 >
                     <Users size={16} /> Community
-                    {pendingConnections > 0 && (
+                    {(pendingConnections + unreadGroupMessages) > 0 && (
                       <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                        {pendingConnections}
+                        {pendingConnections + unreadGroupMessages > 9 ? '9+' : pendingConnections + unreadGroupMessages}
                       </span>
                     )}
                 </Link>
@@ -174,9 +182,9 @@ export function Navbar() {
                 
                 <div className="flex items-center gap-3 pl-4 border-l border-white/10">
                     <Link 
-                      href={`/profile/${username || session.user.email?.split('@')[0]}`} 
+                      href="/community" 
                       className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-500 hover:border-emerald-500 transition-colors" 
-                      title="Profile"
+                      title="My Profile"
                     >
                         {session.user.image ? (
                             <img src={session.user.image} alt="Avatar" className="w-full h-full rounded-full object-cover" />
