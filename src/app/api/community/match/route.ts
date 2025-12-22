@@ -237,11 +237,12 @@ export async function GET(request: NextRequest) {
       const randomUsers = shuffled.slice(0, 5);
       
       for (const buddy of randomUsers) {
+        const buddyUser = buddy.USER as any;
         matchedUsers.push({
           userID: buddy.UserID,
-          username: buddy.USER.Username,
-          level: buddy.USER.Level || 1,
-          xp: buddy.USER.XP || 0,
+          username: buddyUser.Username,
+          level: buddyUser.Level || 1,
+          xp: buddyUser.XP || 0,
           bio: buddy.Bio,
           interests: buddy.Interests || [],
           sharedCourses: [],
