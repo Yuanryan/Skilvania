@@ -33,7 +33,7 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   // Pan and Zoom state
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(0.75);
   const [isPanning, setIsPanning] = useState(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const hasPannedRef = useRef(false);
@@ -270,6 +270,12 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
               Exactly centered inside the 4000px canvas.
             */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1600px] h-[1600px]">
+              {/* Center Crosshair */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0 opacity-50">
+                <div className="absolute w-16 h-[1px] bg-slate-400 -translate-x-1/2"></div>
+                <div className="absolute h-16 w-[1px] bg-slate-400 -translate-y-1/2"></div>
+              </div>
+
               <svg 
                 className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" 
                 viewBox="0 0 1600 1600" 
