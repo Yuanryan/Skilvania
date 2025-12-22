@@ -66,6 +66,10 @@ function BlockComponent({ block }: { block: ContentBlock }) {
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight, rehypeRaw]}
         components={{
+          // 自定義段落渲染，避免 p 標籤內部嵌套 div
+          p: ({ node, ...props }) => {
+            return <div className="mb-4" {...props} />;
+          },
           // 自定義圖片渲染，使用 ImageBlock 組件
           img: ({ node, ...props }) => {
             const { src, alt } = props as { src?: string; alt?: string };
