@@ -607,7 +607,7 @@ export default function LandingPage() {
                               View All
                             </button>
                           </div>
-                          <div className="w-full overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                          <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
                             <div className="flex gap-6 min-w-max">
                               {courses.map(course => (
                                 <div key={course.id} className="flex-shrink-0 w-80">
@@ -645,7 +645,7 @@ export default function LandingPage() {
               transition={{ duration: 0.5, delay: 0.3 }}
               className="hidden lg:block fixed right-0 top-0 h-screen w-80 xl:w-96 pt-24 pb-6 pr-6 pointer-events-none"
             >
-            <div className="h-full overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent pointer-events-auto">
+            <div className="h-full overflow-y-auto pr-2 no-scrollbar pointer-events-auto">
               <div className="bg-slate-900/50 backdrop-blur border border-white/10 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
@@ -666,7 +666,7 @@ export default function LandingPage() {
                   </button>
                 </div>
                 
-                <div className="space-y-4 max-h-[calc(100vh-250px)] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                <div className="space-y-4 max-h-[calc(100vh-250px)] overflow-y-auto pr-2 custom-scrollbar">
                   {recommendedUsers.map(user => (
                     <BuddyCard
                       key={user.userID}
