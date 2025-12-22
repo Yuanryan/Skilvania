@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Sparkles, ArrowRight, Users, Search, Loader2, AlertCircle, TrendingUp, RefreshCw } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import { StartButton } from '@/components/landing/StartButton';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -189,6 +189,8 @@ export default function LandingPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [shouldScrollToExplore, setShouldScrollToExplore] = useState(false);
+  const fetchedRef = useRef(false);
 
   // Custom smooth scroll function with slower speed
   const smoothScrollTo = (element: HTMLElement | null, duration: number = 1500) => {
@@ -273,130 +275,166 @@ export default function LandingPage() {
     };
   }, []);
 
-  // Fetch courses on mount and when pathname changes (ensures fetch on navigation)
-  useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  // Fetch courses function - with smart caching
+  const fetchCourses = useCallback(async (forceRefresh = false) => {
+    // Skip if already fetched and not forcing refresh
+    if (fetchedRef.current && !forceRefresh) {
+      return;
+    }
 
-        const response = await fetch('/api/courses?status=published');
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to fetch courses');
-        }
+    try {
+      setLoading(true);
+      setError(null);
 
-        const data = await response.json();
-        const courses = data.courses || [];
-        setAllCourses(courses);
+      const response = await fetch('/api/courses?status=published', {
+        // Only add no-cache headers when forcing refresh
+        ...(forceRefresh && {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch courses');
+      }
 
-        const trending = [...courses]
-          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-          .slice(0, 3);
-        setTrendingCourses(trending);
+      const data = await response.json();
+      const courses = data.courses || [];
+      setAllCourses(courses);
 
-        const grouped: CoursesByTag = {};
-        for (const course of courses) {
-          if (course.tags && course.tags.length > 0) {
-            for (const tag of course.tags) {
-              if (!grouped[tag]) {
-                grouped[tag] = [];
-              }
-              if (grouped[tag].length < 6) {
-                grouped[tag].push(course);
-              }
+      const trending = [...courses]
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 3);
+      setTrendingCourses(trending);
+
+      const grouped: CoursesByTag = {};
+      for (const course of courses) {
+        if (course.tags && course.tags.length > 0) {
+          for (const tag of course.tags) {
+            if (!grouped[tag]) {
+              grouped[tag] = [];
+            }
+            if (grouped[tag].length < 6) {
+              grouped[tag].push(course);
             }
           }
         }
-        setCoursesByTag(grouped);
-
-      } catch (err) {
-        console.error('Error fetching courses:', err);
-        setError(err instanceof Error ? err.message : 'Unknown error');
-      } finally {
-        setLoading(false);
       }
-    };
+      setCoursesByTag(grouped);
 
-    // Only fetch if we're on the landing page
+      fetchedRef.current = true;
+    } catch (err) {
+      console.error('Error fetching courses:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch recommended users function - with smart caching
+  const fetchRecommendedUsers = useCallback(async (forceRefresh = false) => {
+    // Skip if already fetched and not forcing refresh
+    if (fetchedRef.current && !forceRefresh) {
+      return;
+    }
+
+    try {
+      setUsersLoading(true);
+      const response = await fetch('/api/community/match', {
+        // Only add no-cache headers when forcing refresh
+        ...(forceRefresh && {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setRecommendedUsers(data.matches?.slice(0, 4) || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch recommended users:', err);
+    } finally {
+      setUsersLoading(false);
+    }
+  }, []);
+
+  // Function to scroll to explore section - simplified
+  const scrollToExplore = useCallback(() => {
+    if (!exploreRef.current) return;
+    
+    const elementPosition = exploreRef.current.getBoundingClientRect().top + window.pageYOffset;
+    const navbarHeight = 64;
+    const extraOffset = 80; // Additional offset to scroll a bit lower
+    const targetPosition = elementPosition - navbarHeight + extraOffset;
+    
+    window.scrollTo({
+      top: targetPosition,
+      behavior: 'instant'
+    });
+  }, []);
+
+  // Initial data fetch on mount
+  useEffect(() => {
     if (pathname === '/') {
       fetchCourses();
+      fetchRecommendedUsers();
     }
-  }, [pathname]);
+  }, [pathname, fetchCourses, fetchRecommendedUsers]);
 
-  // Handle scroll position on page load/reload and hash changes
+  // Handle scroll position and hash changes - simplified
   useEffect(() => {
-    const handleScrollToPosition = () => {
+    const performScrollIfNeeded = () => {
       const hash = window.location.hash;
       
       if (hash === '#explore') {
-        // Set hasEnteredExplore to show navbar
         setHasEnteredExplore(true);
         
-        // Wait for DOM to update with navbar, then scroll
-        requestAnimationFrame(() => {
+        // If data is already loaded, scroll immediately
+        if (!loading && !usersLoading && exploreRef.current) {
           requestAnimationFrame(() => {
-            setTimeout(() => {
-              if (exploreRef.current) {
-                // Use scrollIntoView to position the section
-                // This positions the border-t line right below the navbar
-                exploreRef.current.scrollIntoView({ 
-                  behavior: 'instant',
-                  block: 'start'
-                });
-                
-                // Adjust scroll position to account for fixed navbar (64px)
-                const currentScroll = window.scrollY || window.pageYOffset;
-                const navbarHeight = 64;
-                window.scrollTo({
-                  top: currentScroll - navbarHeight,
-                  behavior: 'instant'
-                });
-              }
-            }, 50);
+            requestAnimationFrame(() => {
+              scrollToExplore();
+            });
           });
-        });
+        } else {
+          // Otherwise, wait for data to load
+          setShouldScrollToExplore(true);
+        }
       } else {
-        // Scroll to top of landing page
         window.scrollTo({ top: 0, behavior: 'instant' });
         setHasEnteredExplore(false);
+        setShouldScrollToExplore(false);
       }
     };
 
-    // Handle initial load
-    handleScrollToPosition();
-
-    // Listen for hash changes (e.g., when clicking navbar "Explore" link)
-    const handleHashChange = () => {
-      handleScrollToPosition();
-    };
-
-    window.addEventListener('hashchange', handleHashChange);
+    // Handle hash changes
+    window.addEventListener('hashchange', performScrollIfNeeded);
+    
+    // Initial check (for direct navigation or page reload)
+    performScrollIfNeeded();
     
     return () => {
-      window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('hashchange', performScrollIfNeeded);
     };
-  }, [pathname]);
+  }, [loading, usersLoading, scrollToExplore]);
 
-  // Fetch recommended users
+  // Scroll to explore section after data is loaded
   useEffect(() => {
-    const fetchRecommendedUsers = async () => {
-      try {
-        setUsersLoading(true);
-        const response = await fetch('/api/community/match');
-        if (response.ok) {
-          const data = await response.json();
-          setRecommendedUsers(data.matches?.slice(0, 4) || []);
-        }
-      } catch (err) {
-        console.error('Failed to fetch recommended users:', err);
-      } finally {
-        setUsersLoading(false);
-      }
-    };
-    fetchRecommendedUsers();
-  }, []);
+    if (shouldScrollToExplore && !loading && !usersLoading && exploreRef.current) {
+      // Wait for DOM to settle
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollToExplore();
+          setShouldScrollToExplore(false);
+        });
+      });
+    }
+  }, [shouldScrollToExplore, loading, usersLoading, scrollToExplore]);
 
   const filteredCourses = searchQuery.trim() 
     ? allCourses.filter(course => 
@@ -410,6 +448,48 @@ export default function LandingPage() {
     setSearchQuery(query);
     setIsSearching(query.trim().length > 0);
   };
+
+  // Skeleton placeholder for course card
+  const CourseCardSkeleton = () => (
+    <div className="bg-slate-900/50 backdrop-blur border border-white/5 rounded-2xl p-6 h-full flex flex-col animate-pulse">
+      <div className="h-6 bg-slate-700/50 rounded mb-3 w-3/4"></div>
+      <div className="h-4 bg-slate-700/30 rounded mb-2 w-full"></div>
+      <div className="h-4 bg-slate-700/30 rounded mb-4 w-5/6"></div>
+      <div className="h-3 bg-slate-700/30 rounded mb-4 w-1/3"></div>
+      <div className="flex gap-2 mb-4">
+        <div className="h-5 bg-slate-700/30 rounded w-16"></div>
+        <div className="h-5 bg-slate-700/30 rounded w-20"></div>
+        <div className="h-5 bg-slate-700/30 rounded w-14"></div>
+      </div>
+      <div className="flex items-center justify-between pt-4 border-t border-white/5 mt-auto">
+        <div className="h-4 bg-slate-700/30 rounded w-20"></div>
+        <div className="h-4 bg-slate-700/30 rounded w-24"></div>
+      </div>
+    </div>
+  );
+
+  // Skeleton placeholder for category section
+  const CategorySectionSkeleton = () => (
+    <div className="space-y-12">
+      {[1, 2, 3].map((i) => (
+        <div key={i}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="h-6 bg-slate-700/50 rounded w-32"></div>
+            <div className="h-4 bg-slate-700/30 rounded w-20"></div>
+          </div>
+          <div className="w-full overflow-x-auto pb-4">
+            <div className="flex gap-6 min-w-max">
+              {[1, 2, 3, 4].map((j) => (
+                <div key={j} className="flex-shrink-0 w-80">
+                  <CourseCardSkeleton />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   const CourseCard = ({ course }: { course: Course }) => {
     const { icon: CourseIcon, color } = getIconAndColor(course.title);
@@ -501,20 +581,25 @@ export default function LandingPage() {
         {showAnimation && <BranchingLines />}
         
         <div className="max-w-7xl mx-auto w-full px-6 pr-0 lg:pr-[calc(20rem+2rem)] xl:pr-[calc(24rem+2rem)] relative z-10">
-          <div className="mb-12">
-            <h1 className="text-5xl font-bold text-white mb-4">
+          <div className="mb-12 flex items-center justify-between">
+            <h1 className="text-5xl font-bold text-white">
               Explore <span className="text-emerald-400">Learning Paths</span>
             </h1>
+            <button
+              onClick={() => {
+                fetchCourses(true);
+                fetchRecommendedUsers(true);
+              }}
+              disabled={loading || usersLoading}
+              className="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-400 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Refresh content"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading || usersLoading ? 'animate-spin' : ''}`} />
+              <span className="text-sm font-medium">Refresh</span>
+            </button>
           </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="flex flex-col items-center gap-4 text-white">
-                <Loader2 size={48} className="animate-spin text-emerald-500" />
-                <p className="text-lg">Loading explore page...</p>
-              </div>
-            </div>
-          ) : error ? (
+          {error ? (
             <div className="flex items-center justify-center py-20">
               <div className="flex flex-col items-center gap-4 text-white bg-slate-900/50 p-8 rounded-2xl border border-red-500/20">
                 <AlertCircle size={48} className="text-red-500" />
@@ -525,7 +610,26 @@ export default function LandingPage() {
           ) : (
             <div className="space-y-16">
               {/* Trending Courses Section */}
-              {!isSearching && trendingCourses.length > 0 && (
+              {loading ? (
+                <section>
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-orange-900/20 rounded-lg border border-orange-500/20">
+                        <TrendingUp className="text-orange-400" size={24} />
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-bold text-white">Trending Now</h2>
+                        <p className="text-slate-400 text-sm">Loading...</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[1, 2, 3].map((i) => (
+                      <CourseCardSkeleton key={i} />
+                    ))}
+                  </div>
+                </section>
+              ) : !isSearching && trendingCourses.length > 0 && (
                 <section>
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-3">
@@ -606,7 +710,20 @@ export default function LandingPage() {
               )}
 
               {/* Courses by Tags */}
-              {!isSearching && Object.keys(coursesByTag).length > 0 && (
+              {loading ? (
+                <section data-section="categories">
+                  <div className="flex items-center gap-3 mb-8">
+                    <div className="p-2 bg-purple-900/20 rounded-lg border border-purple-500/20">
+                      <SparklesIcon className="text-purple-400" size={24} />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-white">Browse by Category</h2>
+                      <p className="text-slate-400 text-sm">Loading...</p>
+                    </div>
+                  </div>
+                  <CategorySectionSkeleton />
+                </section>
+              ) : !isSearching && Object.keys(coursesByTag).length > 0 && (
                 <section data-section="categories">
                   <div className="flex items-center gap-3 mb-8">
                     <div className="p-2 bg-purple-900/20 rounded-lg border border-purple-500/20">
@@ -655,7 +772,7 @@ export default function LandingPage() {
               )}
 
               {/* Empty State */}
-              {!isSearching && trendingCourses.length === 0 && Object.keys(coursesByTag).length === 0 && (
+              {!loading && !isSearching && trendingCourses.length === 0 && Object.keys(coursesByTag).length === 0 && (
                 <div className="text-center py-20">
                   <div className="text-white">
                     <p className="text-xl font-bold mb-2">No courses available yet</p>
