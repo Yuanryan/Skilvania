@@ -14,6 +14,7 @@ interface OrganicTreeProps {
   onNodeClick: (node: Node) => void;
   onNodeDrag?: (nodeId: string, x: number, y: number) => void;
   onConnect?: (sourceId: string, targetId: string) => void;
+  scale?: number;
 }
 
 export const OrganicTree: React.FC<OrganicTreeProps> = ({
@@ -23,7 +24,8 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   isCreatorMode,
   onNodeClick,
   onNodeDrag,
-  onConnect
+  onConnect,
+  scale = 1
 }) => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -223,23 +225,13 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
            marginLeft: '-2000px',
            marginTop: '-2000px',
            
-           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom * scale})`,
          }}
       >
         {/* SVG Container - Centered within the large canvas */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px]">
           <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid meet">
             
-            {/* Root Base Visualization */}
-            <path 
-              d="M 360 780 Q 400 750 440 780" 
-              stroke="#3f3c35" 
-              strokeWidth="16" 
-              strokeLinecap="round" 
-              fill="none" 
-              className="opacity-80" 
-              filter="url(#roughness-global)"
-            />
 
             {edges.map((edge) => {
               const startNode = nodes.find(n => n.id === edge.from);
