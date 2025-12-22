@@ -164,6 +164,7 @@ export default function TreePage() {
             isCreatorMode={false}
             onNodeClick={setSelectedNode}
             scale={selectedNode ? Math.max(0.5, 1 - (drawerWidth / 150)) : 1}
+            disableTransition={isResizing}
           />
         </div>
 
