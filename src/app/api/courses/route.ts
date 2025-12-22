@@ -64,7 +64,49 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // 轉換格式並添加作者信息
+      // 獲取所有課程的標籤
+      const courseIds = (courses || []).map((c: any) => c.CourseID);
+      let courseTagsMap: Record<number, string[]> = {};
+      
+      if (courseIds.length > 0) {
+        // 批量查詢課程標籤關聯
+        const { data: courseTags } = await supabase
+          .from('course_tag')
+          .select('CourseID, TagID')
+          .in('CourseID', courseIds);
+
+        if (courseTags && courseTags.length > 0) {
+          // 獲取所有標籤 ID
+          const tagIds = [...new Set(courseTags.map((ct: any) => ct.TagID))];
+          
+          // 批量查詢標籤名稱
+          const { data: tags } = await supabase
+            .from('tag')
+            .select('TagID, Name')
+            .in('TagID', tagIds);
+
+          if (tags) {
+            // 建立標籤 ID 到名稱的映射
+            const tagIdToName: Record<number, string> = tags.reduce((acc: Record<number, string>, tag: any) => {
+              acc[tag.TagID] = tag.Name;
+              return acc;
+            }, {});
+
+            // 建立課程 ID 到標籤名稱數組的映射
+            courseTags.forEach((ct: any) => {
+              if (!courseTagsMap[ct.CourseID]) {
+                courseTagsMap[ct.CourseID] = [];
+              }
+              const tagName = tagIdToName[ct.TagID];
+              if (tagName) {
+                courseTagsMap[ct.CourseID].push(tagName);
+              }
+            });
+          }
+        }
+      }
+
+      // 轉換格式並添加作者信息和標籤
       const formattedCourses = (courses || []).map((course: any) => ({
         id: course.CourseID.toString(),
         title: course.Title,
@@ -74,6 +116,7 @@ export async function GET(request: NextRequest) {
         status: course.Status,
         createdAt: course.CreatedAt,
         updatedAt: course.UpdatedAt,
+        tags: courseTagsMap[course.CourseID] || [],
       }));
 
       return NextResponse.json({ courses: formattedCourses });
