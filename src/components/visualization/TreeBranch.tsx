@@ -37,14 +37,30 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
   if (isCreatorMode) {
     // Use the completed palette for creator mode to mirror finished-state styling
     return (
-      <path 
-        d={path} 
-        stroke="#10b981" 
-        strokeWidth={thickness} 
-        strokeLinecap="round" 
-        fill="none" 
-        className="opacity-80"
-      />
+      <g>
+        
+        <path 
+          d={path} 
+          stroke="#10b981" 
+          strokeWidth={thickness} 
+          strokeLinecap="round" 
+          fill="none" 
+          className="opacity-80"
+        />
+        {/* The "Flow Pulse" for Creator Mode - Shows direction without growth animation */}
+        <path 
+          d={path} 
+          stroke="#a7f3d0" 
+          strokeWidth={thickness * 0.6} 
+          strokeLinecap="round" 
+          fill="none" 
+          style={{
+             strokeDasharray: `100 1400`, 
+             animation: `growBranch 3.5s linear infinite`,
+          }}
+          className="opacity-40 blur-[1px] mix-blend-plus-lighter"
+        />
+      </g>
     );
   }
 
@@ -83,6 +99,24 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
              animationDelay: `${delay}s`
           }}
           className="opacity-80 mix-blend-screen"
+        />
+      )}
+
+      {/* The "Flow Pulse" - Shows direction */}
+      {(status === 'completed' || status === 'unlocked') && (
+        <path 
+          d={path} 
+          stroke="#a7f3d0" 
+          strokeWidth={thickness * 0.6} 
+          strokeLinecap="round" 
+          fill="none" 
+          style={{
+             strokeDasharray: `100 1400`, 
+             animation: `growBranch 3.5s linear infinite, fade-in-pulse 0.1s forwards`,
+             animationDelay: `calc(${delay}s)`, // Wait for growth animation (10s) to finish
+             opacity: 0, // Initially hidden
+          }}
+          className="blur-[1px] mix-blend-plus-lighter"
         />
       )}
     </g>
