@@ -119,7 +119,7 @@ export function Navbar() {
 
       <div className="flex items-center gap-6">
         <Link 
-            href="/courses" 
+            href="/#explore" 
             className="text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-colors"
         >
             <Map size={16} /> Explore
@@ -137,15 +137,9 @@ export function Navbar() {
                 </Link>
                 <Link 
                     href="/community" 
-                    className="text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-colors"
-                >
-                    <Users size={16} /> Community
-                </Link>
-                <Link 
-                    href="/community/connections" 
                     className="text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-colors relative"
                 >
-                    <UserPlus size={16} /> Connections
+                    <Users size={16} /> Community
                     {pendingConnections > 0 && (
                       <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
                         {pendingConnections}

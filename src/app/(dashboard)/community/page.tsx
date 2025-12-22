@@ -1,18 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Users, Settings, Loader2, AlertCircle, Search } from 'lucide-react';
+import { Users, Loader2, AlertCircle, UserCheck, Search, Globe, Trash2 } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import BuddyCard from '@/components/community/BuddyCard';
-import InterestSelector from '@/components/community/InterestSelector';
-
-interface CommunityProfile {
-  userID: number;
-  bio: string | null;
-  interests: string[];
-  lookingForBuddy: boolean;
-  lastActiveCourseID: number | null;
-}
+import Link from 'next/link';
 
 interface MatchedUser {
   userID: number;
@@ -28,6 +20,34 @@ interface MatchedUser {
   compatibilityScore: number;
 }
 
+interface Connection {
+  connectionId: number;
+  status: 'accepted' | 'pending' | 'rejected';
+  direction: 'sent' | 'received';
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    userID: number;
+    username: string;
+    level: number;
+    xp: number;
+  };
+}
+
+interface ConnectionsData {
+  connections: Connection[];
+  categorized: {
+    accepted: Connection[];
+    pendingSent: Connection[];
+    pendingReceived: Connection[];
+  };
+  counts: {
+    accepted: number;
+    pendingSent: number;
+    pendingReceived: number;
+  };
+}
+
 interface ConnectionStatus {
   [userId: number]: {
     status: 'pending_sent' | 'pending_received' | 'connected';
@@ -36,93 +56,36 @@ interface ConnectionStatus {
 }
 
 export default function CommunityPage() {
-  const [profile, setProfile] = useState<CommunityProfile | null>(null);
+  const [activeTab, setActiveTab] = useState<'buddies' | 'groups'>('buddies');
+  const [connectionsData, setConnectionsData] = useState<ConnectionsData | null>(null);
   const [matches, setMatches] = useState<MatchedUser[]>([]);
   const [connectionStatuses, setConnectionStatuses] = useState<ConnectionStatus>({});
-  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [isLoadingConnections, setIsLoadingConnections] = useState(true);
   const [isLoadingMatches, setIsLoadingMatches] = useState(true);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Form state
-  const [bio, setBio] = useState('');
-  const [interests, setInterests] = useState<string[]>([]);
-  const [lookingForBuddy, setLookingForBuddy] = useState(true);
-
-  // Fetch user profile
   useEffect(() => {
-    fetchProfile();
+    fetchConnections();
+    fetchMatches();
   }, []);
-
-  // Fetch matches when profile is loaded
-  useEffect(() => {
-    if (profile) {
-      fetchMatches();
-    }
-  }, [profile]);
-
-  const fetchProfile = async () => {
-    try {
-      setIsLoadingProfile(true);
-      setError(null);
-      const response = await fetch('/api/community/profile');
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to fetch profile (${response.status})`);
-      }
-
-      const data = await response.json();
-      setProfile(data.profile);
-      
-      // Initialize form state
-      setBio(data.profile.bio || '');
-      setInterests(data.profile.interests || []);
-      setLookingForBuddy(data.profile.lookingForBuddy);
-    } catch (err) {
-      console.error('Error fetching profile:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load your community profile');
-    } finally {
-      setIsLoadingProfile(false);
-    }
-  };
-
-  const fetchMatches = async () => {
-    try {
-      setIsLoadingMatches(true);
-      const response = await fetch('/api/community/match');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch matches');
-      }
-
-      const data = await response.json();
-      setMatches(data.matches || []);
-      
-      // Fetch connections to determine status
-      await fetchConnections();
-    } catch (err) {
-      console.error('Error fetching matches:', err);
-      // Don't set error here as it's not critical
-    } finally {
-      setIsLoadingMatches(false);
-    }
-  };
 
   const fetchConnections = async () => {
     try {
+      setIsLoadingConnections(true);
+      setError(null);
       const response = await fetch('/api/community/connections');
       
       if (!response.ok) {
-        return;
+        throw new Error('Failed to fetch connections');
       }
 
-      const data = await response.json();
-      const statusMap: ConnectionStatus = {};
+      const result = await response.json();
+      setConnectionsData(result);
       
-      data.connections.forEach((conn: any) => {
+      // Build connection status map
+      const statusMap: ConnectionStatus = {};
+      result.connections.forEach((conn: Connection) => {
         let status: 'pending_sent' | 'pending_received' | 'connected' = 'connected';
         
         if (conn.status === 'pending') {
@@ -140,55 +103,120 @@ export default function CommunityPage() {
       setConnectionStatuses(statusMap);
     } catch (err) {
       console.error('Error fetching connections:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load connections');
+    } finally {
+      setIsLoadingConnections(false);
     }
   };
 
-  const handleSaveProfile = async () => {
+  const fetchMatches = async () => {
     try {
-      setIsSavingProfile(true);
-      setError(null);
-      setSuccessMessage(null);
-
-      const response = await fetch('/api/community/profile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          bio,
-          interests,
-          lookingForBuddy,
-        }),
-      });
-
+      setIsLoadingMatches(true);
+      const response = await fetch('/api/community/match');
+      
       if (!response.ok) {
-        throw new Error('Failed to save profile');
+        throw new Error('Failed to fetch matches');
       }
 
       const data = await response.json();
-      setProfile(data.profile);
-      setIsEditingProfile(false);
-      setSuccessMessage('Profile updated successfully!');
-      
-      // Refresh matches after profile update
-      fetchMatches();
-
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccessMessage(null), 3000);
+      setMatches(data.matches || []);
     } catch (err) {
-      console.error('Error saving profile:', err);
-      setError('Failed to save profile. Please try again.');
+      console.error('Error fetching matches:', err);
     } finally {
-      setIsSavingProfile(false);
+      setIsLoadingMatches(false);
     }
   };
 
   const handleConnectionChange = () => {
-    // Refresh connections after any connection change
     fetchConnections();
+    fetchMatches();
   };
 
-  if (isLoadingProfile) {
+  const handleRemove = async (connectionId: number) => {
+    if (!confirm('Are you sure you want to remove this connection?')) {
+      return;
+    }
+
+    try {
+      setActionLoading(connectionId);
+      const response = await fetch(`/api/community/connections/${connectionId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(error.error || 'Failed to remove connection');
+        return;
+      }
+
+      await fetchConnections();
+      await fetchMatches();
+    } catch (error) {
+      console.error('Error removing connection:', error);
+      alert('Failed to remove connection');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const renderConnectedBuddy = (connection: Connection) => {
+    const isLoading = actionLoading === connection.connectionId;
+
+    return (
+      <div
+        key={connection.connectionId}
+        className="bg-slate-900 rounded-xl border border-white/10 p-4 hover:border-emerald-500/30 transition-all"
+      >
+        <div className="flex items-start justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-lg">
+              {connection.user.username.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <Link
+                href={`/profile/${connection.user.username}`}
+                className="font-semibold text-lg text-white hover:text-emerald-400 transition-colors"
+              >
+                {connection.user.username}
+              </Link>
+              <div className="flex items-center space-x-2 text-sm text-slate-400">
+                <span>Level {connection.user.level}</span>
+                <span className="text-slate-600">•</span>
+                <span>{connection.user.xp.toLocaleString()} XP</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex space-x-2">
+            <Link
+              href={`/community/messages?userId=${connection.user.userID}`}
+              className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors text-sm"
+            >
+              Message
+            </Link>
+            <button
+              onClick={() => handleRemove(connection.connectionId)}
+              disabled={isLoading}
+              className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm flex items-center space-x-1"
+            >
+              {isLoading ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <>
+                  <Trash2 className="w-3 h-3" />
+                  <span>Remove</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const isLoading = isLoadingConnections || isLoadingMatches;
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-deep-forest flex flex-col">
         <Navbar />
@@ -202,6 +230,10 @@ export default function CommunityPage() {
     );
   }
 
+  // Filter out connected buddies from recommendations
+  const connectedUserIds = new Set(connectionsData?.categorized.accepted.map(c => c.user.userID) || []);
+  const recommendedBuddies = matches.filter(m => !connectedUserIds.has(m.userID));
+
   return (
     <div className="min-h-screen bg-deep-forest flex flex-col">
       <Navbar />
@@ -214,7 +246,7 @@ export default function CommunityPage() {
             <span>Community</span>
           </h1>
           <p className="mt-2 text-slate-400">
-            Connect with fellow learners and find your study buddies
+            Connect with fellow learners and join study groups
           </p>
         </div>
 
@@ -226,205 +258,147 @@ export default function CommunityPage() {
           </div>
         )}
 
-        {/* Success Message */}
-        {successMessage && (
-          <div className="mb-6 bg-emerald-900/20 border border-emerald-500/30 rounded-xl p-4 flex items-start space-x-3">
-            <AlertCircle className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-            <p className="text-emerald-300">{successMessage}</p>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - My Profile */}
-          <div className="lg:col-span-1">
-            <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 sticky top-8">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-white">My Profile</h2>
-                <button
-                  onClick={() => setIsEditingProfile(!isEditingProfile)}
-                  className="text-emerald-400 hover:text-emerald-300 transition-colors"
-                >
-                  <Settings className="w-5 h-5" />
-                </button>
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <div className="bg-slate-900 border border-white/10 rounded-xl p-4">
+            <div className="flex items-center space-x-3">
+              <UserCheck className="w-6 h-6 text-emerald-400" />
+              <div>
+                <p className="text-2xl font-bold text-white">{connectionsData?.counts.accepted || 0}</p>
+                <p className="text-sm text-slate-400">Connected Buddies</p>
               </div>
-
-              {isEditingProfile ? (
-                <div className="space-y-4">
-                  {/* Bio Input */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Bio
-                    </label>
-                    <textarea
-                      value={bio}
-                      onChange={(e) => setBio(e.target.value)}
-                      placeholder="Tell others about yourself..."
-                      className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500"
-                      rows={4}
-                      maxLength={200}
-                    />
-                    <p className="text-xs text-slate-500 mt-1">
-                      {bio.length}/200 characters
-                    </p>
-                  </div>
-
-                  {/* Interests */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Interests
-                    </label>
-                    <InterestSelector
-                      interests={interests}
-                      onChange={setInterests}
-                      placeholder="e.g., Web Development"
-                    />
-                  </div>
-
-                  {/* Looking for Buddy Toggle */}
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-slate-300">
-                      Looking for study buddies
-                    </label>
-                    <button
-                      onClick={() => setLookingForBuddy(!lookingForBuddy)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        lookingForBuddy ? 'bg-emerald-600' : 'bg-slate-700'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          lookingForBuddy ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-
-                  {/* Save Button */}
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={handleSaveProfile}
-                      disabled={isSavingProfile}
-                      className="flex-1 bg-emerald-600 text-white py-2 px-4 rounded-lg hover:bg-emerald-500 disabled:bg-slate-700 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {isSavingProfile ? (
-                        <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-                      ) : (
-                        'Save'
-                      )}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsEditingProfile(false);
-                        // Reset form state
-                        setBio(profile?.bio || '');
-                        setInterests(profile?.interests || []);
-                        setLookingForBuddy(profile?.lookingForBuddy ?? true);
-                      }}
-                      className="flex-1 bg-slate-700 text-slate-300 py-2 px-4 rounded-lg hover:bg-slate-600 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Bio Display */}
-                  {bio ? (
-                    <div>
-                      <h3 className="text-sm font-medium text-slate-300 mb-1">Bio</h3>
-                      <p className="text-sm text-slate-400">{bio}</p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-500 italic">
-                      No bio yet. Click the settings icon to add one!
-                    </p>
-                  )}
-
-                  {/* Interests Display */}
-                  {interests.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-slate-300 mb-2">Interests</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {interests.map((interest, index) => (
-                          <span
-                            key={index}
-                            className="text-xs bg-emerald-900/30 text-emerald-400 px-2 py-1 rounded"
-                          >
-                            {interest}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Status */}
-                  <div className="pt-4 border-t border-white/10">
-                    <div className="flex items-center space-x-2">
-                      <div
-                        className={`w-2 h-2 rounded-full ${
-                          lookingForBuddy ? 'bg-emerald-500' : 'bg-slate-600'
-                        }`}
-                      />
-                      <span className="text-sm text-slate-400">
-                        {lookingForBuddy ? 'Looking for buddies' : 'Not looking for buddies'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
-
-          {/* Right Column - Recommended Buddies */}
-          <div className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-semibold text-white">
-                Recommended Study Buddies
-              </h2>
-              <button
-                onClick={fetchMatches}
-                disabled={isLoadingMatches}
-                className="text-emerald-400 hover:text-emerald-300 flex items-center space-x-2 transition-colors"
-              >
-                <Search className={`w-5 h-5 ${isLoadingMatches ? 'animate-spin' : ''}`} />
-                <span>Refresh</span>
-              </button>
+          <div className="bg-slate-900 border border-white/10 rounded-xl p-4">
+            <div className="flex items-center space-x-3">
+              <Users className="w-6 h-6 text-blue-400" />
+              <div>
+                <p className="text-2xl font-bold text-white">{recommendedBuddies.length}</p>
+                <p className="text-sm text-slate-400">Recommended Matches</p>
+              </div>
             </div>
-
-            {isLoadingMatches ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
-              </div>
-            ) : matches.length === 0 ? (
-              <div className="bg-slate-900 border border-white/10 rounded-2xl p-12 text-center">
-                <Users className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-white mb-2">
-                  No study buddies found
-                </h3>
-                <p className="text-slate-400">
-                  Start a course to find other learners with similar interests!
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {matches.map((match) => {
-                  const connectionStatus = connectionStatuses[match.userID];
-                  return (
-                    <BuddyCard
-                      key={match.userID}
-                      {...match}
-                      connectionStatus={connectionStatus?.status || 'none'}
-                      connectionId={connectionStatus?.connectionId}
-                      onConnectionChange={handleConnectionChange}
-                    />
-                  );
-                })}
-              </div>
-            )}
           </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex space-x-2 mb-6 border-b border-white/10">
+          <button
+            onClick={() => setActiveTab('buddies')}
+            className={`px-4 py-2 font-medium transition-colors border-b-2 ${
+              activeTab === 'buddies'
+                ? 'text-emerald-400 border-emerald-400'
+                : 'text-slate-400 border-transparent hover:text-white'
+            }`}
+          >
+            My Buddies ({connectionsData?.counts.accepted || 0})
+          </button>
+          <button
+            onClick={() => setActiveTab('groups')}
+            className={`px-4 py-2 font-medium transition-colors border-b-2 ${
+              activeTab === 'groups'
+                ? 'text-emerald-400 border-emerald-400'
+                : 'text-slate-400 border-transparent hover:text-white'
+            }`}
+          >
+            Study Groups
+          </button>
+        </div>
+
+        {/* Content */}
+        <div>
+          {activeTab === 'buddies' && (
+            <div className="space-y-8">
+              {/* Connected Buddies */}
+              <div>
+                <h2 className="text-xl font-semibold text-white mb-4 flex items-center space-x-2">
+                  <UserCheck className="w-5 h-5 text-emerald-400" />
+                  <span>Connected Buddies</span>
+                </h2>
+                
+                {connectionsData?.categorized.accepted.length === 0 ? (
+                  <div className="bg-slate-900 border border-white/10 rounded-2xl p-12 text-center">
+                    <Users className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-white mb-2">
+                      No connected buddies yet
+                    </h3>
+                    <p className="text-slate-400">
+                      Connect with recommended users below to start your study network!
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {connectionsData?.categorized.accepted.map(conn => renderConnectedBuddy(conn))}
+                  </div>
+                )}
+              </div>
+
+              {/* Recommended Study Buddies */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold text-white flex items-center space-x-2">
+                    <Search className="w-5 h-5 text-blue-400" />
+                    <span>Recommended Study Buddies</span>
+                  </h2>
+                  <button
+                    onClick={() => {
+                      fetchMatches();
+                      fetchConnections();
+                    }}
+                    className="text-emerald-400 hover:text-emerald-300 flex items-center space-x-2 transition-colors text-sm"
+                  >
+                    <Search className="w-4 h-4" />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+
+                {recommendedBuddies.length === 0 ? (
+                  <div className="bg-slate-900 border border-white/10 rounded-2xl p-12 text-center">
+                    <Users className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-white mb-2">
+                      No new recommendations
+                    </h3>
+                    <p className="text-slate-400">
+                      {connectionsData?.counts.accepted === 0 
+                        ? "Start a course to find study buddies!"
+                        : "You've connected with all recommended users! Check back later for more."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {recommendedBuddies.map((match) => {
+                      const connectionStatus = connectionStatuses[match.userID];
+                      return (
+                        <BuddyCard
+                          key={match.userID}
+                          {...match}
+                          connectionStatus={connectionStatus?.status || 'none'}
+                          connectionId={connectionStatus?.connectionId}
+                          onConnectionChange={handleConnectionChange}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'groups' && (
+            <div className="bg-slate-900 border border-white/10 rounded-2xl p-12 text-center">
+              <Globe className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-white mb-2">
+                Study Groups Coming Soon
+              </h3>
+              <p className="text-slate-400 mb-4">
+                Join study groups to collaborate with multiple learners on the same course!
+              </p>
+              <div className="inline-block bg-blue-900/30 border border-blue-500/30 rounded-lg px-4 py-2 text-sm text-blue-300">
+                Feature in development
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
   );
 }
-
