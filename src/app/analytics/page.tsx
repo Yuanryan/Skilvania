@@ -159,7 +159,14 @@ export default function AnalyticsPage() {
             {selectedTab === 'time-distribution' && <TimeDistributionView data={data} />}
             {selectedTab === 'course-duration' && <CourseDurationView data={data} />}
             {selectedTab === 'course-popularity' && <CoursePopularityView data={data} />}
-            {selectedTab === 'user-activity' && <UserActivityView data={data} />}
+            {selectedTab === 'user-activity' && (
+              <UserActivityView 
+                data={data} 
+                handleSeedGroups={handleSeedGroups}
+                seedingGroups={seedingGroups}
+                seedResult={seedResult}
+              />
+            )}
           </div>
         )}
       </main>
@@ -341,7 +348,17 @@ function CoursePopularityView({ data }: { data: any }) {
 }
 
 // User Activity View
-function UserActivityView({ data }: { data: any }) {
+function UserActivityView({ 
+  data, 
+  handleSeedGroups, 
+  seedingGroups, 
+  seedResult 
+}: { 
+  data: any;
+  handleSeedGroups: () => Promise<void>;
+  seedingGroups: boolean;
+  seedResult: string | null;
+}) {
   if (!data) return <div className="text-slate-400">No data available</div>;
   
   const translateEvent = (event: string) => {

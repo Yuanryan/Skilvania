@@ -79,6 +79,11 @@ export async function GET(
       .eq('UserID', userId)
       .single();
 
+    // Handle both array and object cases for Supabase foreign key relationships
+    const tag = group.tag 
+      ? (Array.isArray(group.tag) ? group.tag[0] : group.tag)
+      : null;
+
     return NextResponse.json({
       group: {
         groupId: group.GroupID,
@@ -86,7 +91,7 @@ export async function GET(
         description: group.Description,
         type: group.Type,
         tagId: group.TagID,
-        tagName: group.tag?.Name || null,
+        tagName: tag?.Name || null,
         creatorId: group.CreatorID,
         memberCount: memberCount || 0,
         isMember: !!userMembership,
@@ -126,6 +131,8 @@ export async function PUT(
     if (isNaN(groupIdNum)) {
       return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 });
     }
+
+    const supabase = createAdminClient();
 
     const body = await request.json();
     const { name, description, type } = body;
@@ -175,8 +182,6 @@ export async function PUT(
         );
       }
     }
-
-    const supabase = createAdminClient();
 
     // Check if user is admin of the group
     const { data: membership } = await supabase

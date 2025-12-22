@@ -71,10 +71,14 @@ export async function GET(request: NextRequest) {
         const otherUserId = msg.SenderID === userId ? msg.ReceiverID : msg.SenderID;
         
         if (!dmConversationsMap.has(otherUserId)) {
+          // Handle both array and object cases for Supabase foreign key relationships
+          const receiver = Array.isArray(msg.receiver) ? msg.receiver[0] : msg.receiver;
+          const sender = Array.isArray(msg.sender) ? msg.sender[0] : msg.sender;
+          
           dmConversationsMap.set(otherUserId, {
             type: 'dm',
             id: otherUserId,
-            name: msg.SenderID === userId ? msg.receiver.Username : msg.sender.Username,
+            name: msg.SenderID === userId ? receiver?.Username : sender?.Username,
             lastMessage: {
               content: msg.Content,
               createdAt: msg.CreatedAt,
@@ -170,6 +174,11 @@ export async function GET(request: NextRequest) {
         const lastMessage = lastMessageMap.get(groupId);
         const unreadCount = unreadCountMap.get(groupId) || 0;
 
+        // Handle both array and object cases for Supabase foreign key relationships
+        const sender = lastMessage?.sender 
+          ? (Array.isArray(lastMessage.sender) ? lastMessage.sender[0] : lastMessage.sender)
+          : null;
+
         groupConversations.push({
           type: 'group',
           id: groupId,
@@ -179,7 +188,7 @@ export async function GET(request: NextRequest) {
             content: lastMessage.Content,
             createdAt: lastMessage.CreatedAt,
             isFromMe: lastMessage.SenderID === userId,
-            senderName: lastMessage.sender?.Username
+            senderName: sender?.Username
           } : null,
           unreadCount: unreadCount
         });
