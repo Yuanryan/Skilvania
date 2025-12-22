@@ -12,6 +12,23 @@ import ImageBlock from '@/components/content/ImageBlock';
 import VideoBlock from '@/components/content/VideoBlock';
 import 'highlight.js/styles/github-dark.css';
 
+/**
+ * 檢測是否為影片 URL
+ */
+function isVideoUrl(url: string): boolean {
+  const videoPatterns = [
+    /youtube\.com\/watch/,
+    /youtu\.be\//,
+    /youtube\.com\/embed/,
+    /vimeo\.com/,
+    /\.mp4$/i,
+    /\.webm$/i,
+    /\.mov$/i,
+    /\.avi$/i,
+  ];
+  return videoPatterns.some(pattern => pattern.test(url));
+}
+
 interface BlockRendererProps {
   blocks: ContentBlock[];
   className?: string;
@@ -42,28 +59,60 @@ export default function BlockRenderer({ blocks, className = '' }: BlockRendererP
  * 渲染單個 Block
  */
 function BlockComponent({ block }: { block: ContentBlock }) {
-  switch (block.type) {
-    case 'markdown':
-      return (
-        <div className="prose prose-invert prose-emerald max-w-none markdown-content">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeHighlight, rehypeRaw]}
-          >
-            {block.content}
-          </ReactMarkdown>
-        </div>
-      );
-    
-    case 'image':
-      return <ImageBlock url={block.url} alt={block.alt} caption={block.caption} />;
-    
-    case 'video':
-      return <VideoBlock url={block.url} provider={block.provider} title={block.title} />;
-    
-    default:
-      return null;
-  }
+  // 現在只有 markdown block
+  return (
+    <div className="prose prose-invert prose-emerald max-w-none markdown-content">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeHighlight, rehypeRaw]}
+        components={{
+          // 自定義圖片渲染，使用 ImageBlock 組件
+          img: ({ node, ...props }) => {
+            const { src, alt } = props as { src?: string; alt?: string };
+            if (!src) return null;
+            
+            // 從 alt 文字中提取 caption（如果格式為 "alt|caption"）
+            const [imageAlt, caption] = (alt || '').split('|');
+            
+            return (
+              <ImageBlock 
+                url={src} 
+                alt={imageAlt || undefined} 
+                caption={caption || undefined} 
+              />
+            );
+          },
+          // 自定義連結渲染，檢測影片 URL
+          a: ({ node, ...props }) => {
+            const { href, children } = props as { href?: string; children?: React.ReactNode };
+            if (!href) return <a {...props} />;
+            
+            // 如果是影片 URL，使用 VideoBlock 渲染
+            if (isVideoUrl(href)) {
+              const title = typeof children === 'string' ? children : undefined;
+              return <VideoBlock url={href} title={title} />;
+            }
+            
+            // 否則使用普通連結
+            return (
+              <a 
+                href={href} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-emerald-400 hover:text-emerald-300 underline"
+                {...props}
+              >
+                {children}
+              </a>
+            );
+          },
+        }}
+      >
+        {block.content}
+      </ReactMarkdown>
+    </div>
+  );
 }
+
 
 
