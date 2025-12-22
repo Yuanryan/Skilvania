@@ -6,11 +6,8 @@ import { ArrowLeft, BookOpen, CheckCircle, PlayCircle, FileText, Award, Loader2,
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { logNodeView, logNodeComplete, logUserActivity } from '@/lib/utils/activityLogger';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-import rehypeRaw from 'rehype-raw';
-import 'highlight.js/styles/github-dark.css';
+import { parseContent } from '@/types/content';
+import BlockRenderer from '@/lib/content/blockRenderer';
 
 interface NodeData {
   title: string;
@@ -193,22 +190,15 @@ export default function LessonContentPage() {
           {/* Main Content Area */}
           <div className="lg:col-span-8 xl:col-span-9 space-y-6 sm:space-y-8">
             
-            {/* Markdown Content */}
+            {/* Content Area - 支援 Block 格式和 Markdown */}
             <div className="bg-slate-900/50 border border-white/10 rounded-xl p-4 sm:p-6 md:p-8">
-              <div className="prose prose-invert prose-emerald max-w-none markdown-content">
-                {lesson.content ? (
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeHighlight, rehypeRaw]}
-                  >
-                    {lesson.content}
-                  </ReactMarkdown>
-                ) : (
-                  <div className="text-slate-400 italic">
-                    <p>此課程節點還沒有內容。請稍後再來查看。</p>
-                  </div>
-                )}
-              </div>
+              {lesson.content ? (
+                <BlockRenderer blocks={parseContent(lesson.content)} />
+              ) : (
+                <div className="text-slate-400 italic">
+                  <p>此課程節點還沒有內容。請稍後再來查看。</p>
+                </div>
+              )}
             </div>
 
           </div>
