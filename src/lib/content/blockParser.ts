@@ -31,20 +31,8 @@ export function validateBlock(block: any): block is ContentBlock {
   
   if (!('type' in block)) return false;
   
-  switch (block.type) {
-    case 'markdown':
-      return typeof block.content === 'string';
-    case 'image':
-      return typeof block.url === 'string' && 
-             (block.alt === undefined || typeof block.alt === 'string') &&
-             (block.caption === undefined || typeof block.caption === 'string');
-    case 'video':
-      return typeof block.url === 'string' &&
-             (block.provider === undefined || ['youtube', 'vimeo', 'other'].includes(block.provider)) &&
-             (block.title === undefined || typeof block.title === 'string');
-    default:
-      return false;
-  }
+  // 現在只有 markdown block
+  return block.type === 'markdown' && typeof block.content === 'string';
 }
 
 /**
@@ -53,5 +41,6 @@ export function validateBlock(block: any): block is ContentBlock {
 export function validateBlocks(blocks: any[]): blocks is ContentBlock[] {
   return Array.isArray(blocks) && blocks.every(validateBlock);
 }
+
 
 
