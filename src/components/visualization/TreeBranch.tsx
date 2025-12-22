@@ -31,7 +31,7 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
   const thickness = 4 + (normalizeY * 10); 
 
   const delay = getDelay(start.y);
-  const length = 500; 
+  const length = 3000; 
 
   // In Creator Mode, we want solid lines that update instantly, no fancy growth animation
   if (isCreatorMode) {
@@ -63,7 +63,7 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
         style={{
           strokeDasharray: length,
           strokeDashoffset: length,
-          animation: `growBranch 2s ease-out forwards`,
+          animation: `growBranch 10s ease-out forwards`,
           animationDelay: `${delay}s`,
         }}
       />
@@ -79,7 +79,7 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
           style={{
              strokeDasharray: length,
              strokeDashoffset: length,
-             animation: `growBranch 2s ease-out forwards`,
+             animation: `growBranch 10s ease-out forwards`,
              animationDelay: `${delay}s`
           }}
           className="opacity-80 mix-blend-screen"

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, ArrowRight, Loader2, Save, Edit3, Eye, CheckCircle2 } from 'lucide-react';
+import { X, ArrowRight, Loader2, Save, Edit3, Eye, CheckCircle2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { parseContent, ContentBlock } from '@/types/content';
 import { Node, NodeType } from '@/types';
 import BlockEditor from '@/components/content/BlockEditor';
@@ -35,6 +35,36 @@ export function LessonEditorDrawer({
 }: LessonEditorDrawerProps) {
   // const [activeTab, setActiveTab] = useState<'settings' | 'content'>('settings'); // Removed tab state
   const isResizingRef = useRef(false);
+  const [isDrawerCollapsed, setIsDrawerCollapsed] = useState(false);
+  const [prevWidth, setPrevWidth] = useState(width);
+
+  // When toggling, we want to animate width to 0 or back to previous width
+  const handleToggleCollapse = () => {
+    if (isDrawerCollapsed) {
+      // Open
+      setIsDrawerCollapsed(false);
+      onWidthChange(prevWidth);
+    } else {
+      // Close
+      setPrevWidth(width);
+      setIsDrawerCollapsed(true);
+      onWidthChange(0); // Effectively hidden but we keep it mounted
+    }
+  };
+
+  // If width is changed externally (e.g. resizing), update our prevWidth if not collapsed
+  useEffect(() => {
+    if (!isDrawerCollapsed && width > 0) {
+      setPrevWidth(width);
+    }
+    if (width === 0 && !isDrawerCollapsed) {
+       // If it became 0 by some other means (unlikely in current setup), treat as collapsed
+       setIsDrawerCollapsed(true);
+    } else if (width > 0 && isDrawerCollapsed) {
+       // If it became > 0 while we thought it was collapsed, uncollapse
+       setIsDrawerCollapsed(false);
+    }
+  }, [width, isDrawerCollapsed]);
 
   // --- Content Editor State ---
   const [blocks, setBlocks] = useState<ContentBlock[]>([]);
@@ -43,6 +73,7 @@ export function LessonEditorDrawer({
   const [contentSaved, setContentSaved] = useState(false);
   const [viewMode, setViewMode] = useState<'split' | 'edit' | 'preview'>('split');
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedContentRef = useRef<string>('');
   const isInitialLoadRef = useRef(true);
 
@@ -51,6 +82,7 @@ export function LessonEditorDrawer({
   const [localSettings, setLocalSettings] = useState<Partial<Node>>({});
 
   useEffect(() => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     if (initialData) {
       setLocalSettings({
         title: initialData.title,
@@ -59,11 +91,20 @@ export function LessonEditorDrawer({
         iconName: initialData.iconName
       });
     }
-  }, [initialData]);
+  }, [nodeId]);
 
   // Load Content when drawer opens or nodeId changes
   useEffect(() => {
     if (!isOpen || !courseId || !nodeId) return;
+
+    // 新建的臨時節點還未寫入資料庫，直接顯示空內容
+    if (nodeId.startsWith('temp-')) {
+      setBlocks([]);
+      lastSavedContentRef.current = JSON.stringify([]);
+      isInitialLoadRef.current = true;
+      setLoadingContent(false);
+      return;
+    }
 
     const loadContent = async () => {
       try {
@@ -73,6 +114,12 @@ export function LessonEditorDrawer({
         isInitialLoadRef.current = true;
         
         const response = await fetch(`/api/courses/${courseId}/nodes/${nodeId}/content`);
+        if (response.status === 404) {
+          // 尚未有內容（或節點尚未建立），以空內容初始化
+          setBlocks([]);
+          lastSavedContentRef.current = JSON.stringify([]);
+          return;
+        }
         if (!response.ok) throw new Error('Failed to load content');
         
         const data = await response.json();
@@ -138,25 +185,28 @@ export function LessonEditorDrawer({
   // --- Settings Handlers ---
   const handleSettingChange = (field: keyof Node, value: any) => {
     setLocalSettings(prev => ({ ...prev, [field]: value }));
-    
-    // Also update parent immediately (parent handles debouncing for API calls if needed)
-    // Or we could debounce here. The parent implementation in `editor/page.tsx` has debouncing for title.
-    if (field === 'type') {
-       // Auto-set icon based on type
-       const iconMap: Record<string, string> = {
-        'theory': 'Book',
-        'code': 'Code',
-        'project': 'Rocket',
-        'guide': 'Map',
-        'tutorial': 'GraduationCap',
-        'checklist': 'CheckSquare',
-        'resource': 'FileText'
-      };
-      const newIconName = iconMap[value] || 'Code';
-      onUpdateNode(nodeId, { [field]: value, iconName: newIconName });
-    } else {
-      onUpdateNode(nodeId, { [field]: value });
-    }
+
+    // Debounce parent updates to avoid feedback loops while typing
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+
+    debounceTimerRef.current = setTimeout(() => {
+      if (field === 'type') {
+         // Auto-set icon based on type
+         const iconMap: Record<string, string> = {
+          'theory': 'Book',
+          'code': 'Code',
+          'project': 'Rocket',
+          'guide': 'Map',
+          'tutorial': 'GraduationCap',
+          'checklist': 'CheckSquare',
+          'resource': 'FileText'
+        };
+        const newIconName = iconMap[value] || 'Code';
+        onUpdateNode(nodeId, { [field]: value, iconName: newIconName });
+      } else {
+        onUpdateNode(nodeId, { [field]: value });
+      }
+    }, 500);
   };
 
   // --- Content Handlers ---
@@ -215,33 +265,51 @@ export function LessonEditorDrawer({
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
   }, []);
 
   if (!isOpen) return null;
 
   return (
-    <div 
-      className="absolute right-0 top-0 bottom-0 bg-slate-900/95 backdrop-blur-xl border-l border-white/10 shadow-2xl flex flex-col z-50 animate-slide-in"
-      style={{ width: `${width}%` }}
-    >
-       {/* Resize Handle */}
-       <div 
-         className="absolute left-0 top-0 bottom-0 w-1 hover:w-2 bg-transparent hover:bg-emerald-500/50 cursor-ew-resize transition-all z-50 flex items-center justify-center group -ml-[2px]"
-         onMouseDown={handleResizeStart}
-       >
-          <div className="h-8 w-1 bg-slate-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-       </div>
+    <>
+      {/* Drawer Container */}
+      <div 
+        className="absolute right-0 top-0 bottom-0 bg-slate-900/95 backdrop-blur-xl border-l border-white/10 shadow-2xl flex flex-col z-50 transition-all duration-300 ease-in-out"
+        style={{ width: isDrawerCollapsed ? '0px' : `${width}%` }}
+      >
+         {/* Toggle Button - Attached to the left edge of the drawer */}
+         <button
+            onClick={handleToggleCollapse}
+            className="absolute left-0 top-1/2 -translate-x-full -translate-y-1/2 bg-slate-800 border border-white/10 border-r-0 rounded-l-lg p-1 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors shadow-lg z-50 flex items-center justify-center w-6 h-12"
+            title={isDrawerCollapsed ? "Open Drawer" : "Close Drawer"}
+            style={{ 
+               // Ensure button stays visible even when drawer width is 0
+               // It's positioned relative to the drawer, so it moves with it.
+               // When width is 0, drawer is at right:0, so left:0 is screen edge.
+               // We need to make sure it doesn't get clipped if parent has overflow hidden.
+               // But usually parent (CreatorEditorPage) handles layout.
+            }}
+         >
+            {isDrawerCollapsed ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+         </button>
 
-       {/* Header */}
-       <div className="flex items-center justify-between p-4 border-b border-white/10 bg-slate-900/50">
+         {/* Resize Handle - Only visible when open */}
+         {!isDrawerCollapsed && (
+           <div 
+             className="absolute left-0 top-0 bottom-0 w-1 hover:w-2 bg-transparent hover:bg-emerald-500/50 cursor-ew-resize transition-all z-50 flex items-center justify-center group -ml-[2px]"
+             onMouseDown={handleResizeStart}
+           >
+              <div className="h-8 w-1 bg-slate-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+           </div>
+         )}
+
+         {/* Drawer Content - Hide when collapsed to prevent layout issues */}
+         <div className={`flex flex-col h-full w-full ${isDrawerCollapsed ? 'hidden' : 'block'}`}>
+           {/* Header */}
+           <div className="flex items-center justify-between p-4 border-b border-white/10 bg-slate-900/50">
           <div className="flex items-center gap-4 flex-1 mr-4">
-             <button 
-                onClick={onClose}
-                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
-             >
-                <ArrowRight size={20} />
-             </button>
+            
              <div className="flex-1">
                 <div className="text-xs text-emerald-500 font-bold uppercase tracking-wider mb-1">
                    Lesson Editor
@@ -254,15 +322,33 @@ export function LessonEditorDrawer({
                 />
              </div>
           </div>
-          
-          <div className="flex items-center gap-2">
-            <button 
-                onClick={onClose} 
-                className="text-slate-500 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"
-            >
-                <X size={20} />
-            </button>
-          </div>
+              {/* Properties Integration */}
+              <div className="flex items-center gap-2">
+                <select 
+                  value={localSettings.type || 'theory'}
+                  onChange={(e) => handleSettingChange('type', e.target.value)}
+                  className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                >
+                  <option value="theory">Theory</option>
+                  <option value="code">Code</option>
+                  <option value="project">Project</option>
+                  <option value="guide">Guide</option>
+                  <option value="tutorial">Tutorial</option>
+                  <option value="checklist">Checklist</option>
+                  <option value="resource">Resource</option>
+                </select>
+                
+                <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">XP</span>
+                    <input 
+                      type="number"
+                      value={localSettings.xp || 0} 
+                      onChange={(e) => handleSettingChange('xp', parseInt(e.target.value) || 0)}
+                      className="bg-transparent text-xs text-white w-12 focus:outline-none"
+                    />
+                </div>
+            </div>
+         
        </div>
 
        {/* Body */}
@@ -301,32 +387,7 @@ export function LessonEditorDrawer({
 
                     <div className="h-6 w-[1px] bg-slate-700"></div>
 
-                    {/* Properties Integration */}
-                    <div className="flex items-center gap-2">
-                       <select 
-                          value={localSettings.type || 'theory'}
-                          onChange={(e) => handleSettingChange('type', e.target.value)}
-                          className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-                        >
-                          <option value="theory">Theory</option>
-                          <option value="code">Code</option>
-                          <option value="project">Project</option>
-                          <option value="guide">Guide</option>
-                          <option value="tutorial">Tutorial</option>
-                          <option value="checklist">Checklist</option>
-                          <option value="resource">Resource</option>
-                        </select>
-                        
-                        <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5">
-                           <span className="text-[10px] text-slate-400 font-bold uppercase">XP</span>
-                           <input 
-                              type="number"
-                              value={localSettings.xp || 0} 
-                              onChange={(e) => handleSettingChange('xp', parseInt(e.target.value) || 0)}
-                              className="bg-transparent text-xs text-white w-12 focus:outline-none"
-                            />
-                        </div>
-                    </div>
+
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -394,7 +455,8 @@ export function LessonEditorDrawer({
           </div>
 
        </div>
-
+      </div>
+    </>
   );
 }
 

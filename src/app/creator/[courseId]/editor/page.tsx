@@ -471,9 +471,6 @@ export default function CreatorEditorPage() {
                 </>
               )}
             </button>
-            <button className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg">
-                <Settings size={18} />
-            </button>
         </div>
       </header>
 
@@ -503,9 +500,11 @@ export default function CreatorEditorPage() {
                 isCreatorMode={true}
                 onNodeClick={handleTreeNodeClick}
                 onBackgroundClick={() => {
-                  setSelectedNodeId(null);
-                  setIsConnecting(false);
-                  setConnectSourceId(null);
+                  // 點擊空白處不再關閉抽屜，只在連線模式下取消連線狀態
+                  if (isConnecting) {
+                    setIsConnecting(false);
+                    setConnectSourceId(null);
+                  }
                 }}
                 onNodeDrag={handleNodeDrag}
                 scale={selectedNodeId ? Math.max(0.5, 1 - (drawerWidth / 150)) : 1}

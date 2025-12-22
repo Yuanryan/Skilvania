@@ -224,12 +224,6 @@ export function LessonDrawer({
             <div className="hidden sm:flex items-center gap-2 text-amber-400 font-bold bg-amber-400/10 px-3 py-1 rounded-full text-sm">
                {lesson?.xp || 0} XP
             </div>
-            <button 
-                onClick={onClose} 
-                className="text-slate-500 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"
-            >
-                <X size={20} />
-            </button>
           </div>
        </div>
 

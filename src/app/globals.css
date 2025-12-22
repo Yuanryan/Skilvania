@@ -39,7 +39,7 @@
 }
 
 @keyframes growBranch {
-  from { stroke-dashoffset: 500; }
+  from { stroke-dashoffset: 3000; }
   to { stroke-dashoffset: 0; }
 }
 
