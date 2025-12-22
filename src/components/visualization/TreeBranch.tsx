@@ -11,7 +11,7 @@ interface TreeBranchProps {
 }
 
 const getDelay = (y: number) => {
-  const startY = 750;
+  const startY = 1500;
   const pxPerSecond = 250;
   return Math.max(0, (startY - y) / pxPerSecond); 
 };
@@ -27,7 +27,7 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
       ${end.x} ${end.y}
   `;
 
-  const normalizeY = Math.max(0, Math.min(1, start.y / 800)); 
+  const normalizeY = Math.max(0, Math.min(1, start.y / 1600)); 
   const thickness = 4 + (normalizeY * 10); 
 
   const delay = getDelay(start.y);
@@ -43,6 +43,7 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
         strokeLinecap="round" 
         fill="none" 
         className="opacity-50"
+        markerEnd="url(#arrowhead)"
       />
     );
   }

@@ -16,7 +16,7 @@ interface OrganicNodeProps {
 }
 
 const getDelay = (y: number) => {
-  const startY = 750;
+  const startY = 1500;
   const pxPerSecond = 250;
   return Math.max(0, (startY - y) / pxPerSecond); 
 };
@@ -56,8 +56,8 @@ export const OrganicNode: React.FC<OrganicNodeProps> = ({
         selectedStyle
       )}
       style={{ 
-        left: `${(node.x / 800) * 100}%`, // Assuming 800 width base
-        top: `${(node.y / 800) * 100}%`,  // Assuming 800 height base
+        left: `${(node.x / 1600) * 100}%`, // Assuming 1600 width base
+        top: `${(node.y / 1600) * 100}%`,  // Assuming 1600 height base
       }}
       initial={!isCreatorMode ? { scale: 0, opacity: 0 } : { scale: 1, opacity: 1 }}
       animate={!isCreatorMode ? { scale: isSelected ? 1.25 : 1, opacity: 1 } : { scale: isSelected ? 1.1 : 1, opacity: 1 }}

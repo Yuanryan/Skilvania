@@ -53,8 +53,8 @@ export default function CreatorEditorPage() {
       title: "New Skill", 
       xp: 100, 
       type: "code", 
-      x: 400, 
-      y: 400, 
+      x: 800, 
+      y: 800, 
       iconName: 'Code' 
     };
     

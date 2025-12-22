@@ -109,9 +109,9 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
       const relativeX = (e.clientX - containerRect.left - containerCenterX - pan.x) / zoom;
       const relativeY = (e.clientY - containerRect.top - containerCenterY - pan.y) / zoom;
       
-      // Convert to SVG coordinates (0-800 range), SVG is centered at (0,0) in canvas space
-      const x = Math.max(0, Math.min(800, relativeX + 400));
-      const y = Math.max(0, Math.min(800, relativeY + 400));
+      // Convert to SVG coordinates (0-1600 range), SVG is centered at (0,0) in canvas space
+      const x = Math.max(0, Math.min(1600, relativeX + 800));
+      const y = Math.max(0, Math.min(1600, relativeY + 800));
   
       onNodeDrag(draggingId, x, y);
       return;
@@ -269,12 +269,25 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
               4. CONTENT CONTAINER: 
               Exactly centered inside the 4000px canvas.
             */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px]">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1600px] h-[1600px]">
               <svg 
                 className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" 
-                viewBox="0 0 800 800" 
+                viewBox="0 0 1600 1600" 
                 preserveAspectRatio="xMidYMid meet"
               >
+                <defs>
+                  <marker
+                    id="arrowhead"
+                    markerWidth="12"
+                    markerHeight="12"
+                    refX="48"
+                    refY="6"
+                    orient="auto"
+                    markerUnits="userSpaceOnUse"
+                  >
+                    <path d="M0,2 L12,6 L0,10" fill="#475569" />
+                  </marker>
+                </defs>
                 {edges.map((edge) => {
                   const startNode = nodes.find(n => n.id === edge.from);
                   const endNode = nodes.find(n => n.id === edge.to);
@@ -297,7 +310,7 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
               </svg>
 
               {/* Nodes Container */}
-              <div className="absolute inset-0 w-[800px] h-[800px]">
+              <div className="absolute inset-0 w-[1600px] h-[1600px]">
                 {nodes.map(node => (
                   <OrganicNode 
                     key={node.id} 
