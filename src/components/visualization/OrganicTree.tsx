@@ -14,6 +14,7 @@ interface OrganicTreeProps {
   onNodeClick: (node: Node) => void;
   onNodeDrag?: (nodeId: string, x: number, y: number) => void;
   onConnect?: (sourceId: string, targetId: string) => void;
+  onBackgroundClick?: () => void;
   scale?: number;
   disableTransition?: boolean;
 }
@@ -26,18 +27,14 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   onNodeClick,
   onNodeDrag,
   onConnect,
+  onBackgroundClick,
   scale = 1,
   disableTransition = false
 }) => {
+  const BASE_ZOOM = 0.5;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  // Pan and Zoom state
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(0.75);
-  const [isPanning, setIsPanning] = useState(false);
-  const lastMousePos = useRef({ x: 0, y: 0 });
-  const hasPannedRef = useRef(false);
-
+  
   const canvasRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
@@ -70,44 +67,36 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
     isDraggingRef.current = false;
   };
 
-  const handleCanvasMouseDown = (e: React.MouseEvent) => {
-    // Don't pan if dragging a node (shouldn't happen due to stopPropagation in handleNodeMouseDown, but just in case)
-    if (draggingId) return;
-    // Only left click
-    if (e.button !== 0) return;
-
-    setIsPanning(true);
-    lastMousePos.current = { x: e.clientX, y: e.clientY };
-    hasPannedRef.current = false;
-  };
-
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
     // 1. Handle Node Dragging (Creator Mode)
     if (draggingId && canvasRef.current && onNodeDrag) {
-      // 檢查是否真的在拖曳（移動距離超過閾值）
+      if (!containerRef.current) return;
+      
+      // 檢查移動距離以區分點擊和拖曳
       if (mouseDownPosRef.current) {
         const dx = e.clientX - mouseDownPosRef.current.x;
         const dy = e.clientY - mouseDownPosRef.current.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
         
-        // 只有移動距離超過閾值才視為拖曳
-        if (distance < DRAG_THRESHOLD) {
-          return; // 移動距離太小，不視為拖曳
+        // 只有移動距離超過閾值才標記為真正的拖曳（避免誤觸點擊）
+        if (distance >= DRAG_THRESHOLD) {
+          isDraggingRef.current = true;
         }
+        // 即使距離小於閾值，也繼續處理（允許初始拖曳），但不會標記為拖曳（避免觸發點擊）
       }
       
-      isDraggingRef.current = true;
-      
+      // 一旦開始拖曳（draggingId 存在），就立即更新位置
       // Get container and canvas positions
-      if (!containerRef.current) return;
-      
       const containerRect = containerRef.current.getBoundingClientRect();
       const containerCenterX = containerRect.width / 2;
       const containerCenterY = containerRect.height / 2;
       
-      // Calculate mouse position relative to container center, then account for pan and zoom
-      const relativeX = (e.clientX - containerRect.left - containerCenterX - pan.x) / zoom;
-      const relativeY = (e.clientY - containerRect.top - containerCenterY - pan.y) / zoom;
+      // Calculate mouse position relative to container center
+      // Since zoom/pan are removed, the only transform affecting screen space is (scale * BASE_ZOOM).
+      // Convert from screen pixels back into the 1600x1600 logical space.
+      const effectiveScale = scale * BASE_ZOOM;
+      const relativeX = (e.clientX - containerRect.left - containerCenterX) / effectiveScale;
+      const relativeY = (e.clientY - containerRect.top - containerCenterY) / effectiveScale;
       
       // Convert to SVG coordinates (0-1600 range), SVG is centered at (0,0) in canvas space
       const x = Math.max(0, Math.min(1600, relativeX + 800));
@@ -116,33 +105,15 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
       onNodeDrag(draggingId, x, y);
       return;
     }
-
-    // 2. Handle Canvas Panning
-    if (isPanning) {
-      e.preventDefault(); // Prevent text selection etc.
-      const dx = e.clientX - lastMousePos.current.x;
-      const dy = e.clientY - lastMousePos.current.y;
-      
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-        hasPannedRef.current = true;
-      }
-
-      setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
-      lastMousePos.current = { x: e.clientX, y: e.clientY };
-    }
   };
 
   const handleCanvasMouseUp = () => {
     // 重置拖曳相關狀態
     mouseDownPosRef.current = null;
     setDraggingId(null);
-    setIsPanning(false);
   };
 
   const handleNodeClick = (node: Node) => {
-    // Prevent click if we were panning
-    if (hasPannedRef.current) return;
-
     if (isCreatorMode) {
         if (!isDraggingRef.current) {
             // If we were already selecting a node, maybe we want to connect them?
@@ -160,69 +131,21 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   };
 
   const handleBackgroundClick = () => {
-    if (!hasPannedRef.current) {
-        setSelectedNodeId(null);
+    setSelectedNodeId(null);
+    if (onBackgroundClick) {
+      onBackgroundClick();
     }
   };
-
-  // --- ZOOM HANDLERS ---
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    
-    if (!containerRef.current || !canvasRef.current) return;
-    
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - containerRect.left;
-    const mouseY = e.clientY - containerRect.top;
-    
-    // Zoom factor
-    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.25, Math.min(3, zoom * zoomFactor));
-    
-    // Calculate container center
-    const containerCenterX = containerRect.width / 2;
-    const containerCenterY = containerRect.height / 2;
-    
-    // Calculate the point in the canvas before zoom
-    const canvasX = (mouseX - containerCenterX - pan.x) / zoom;
-    const canvasY = (mouseY - containerCenterY - pan.y) / zoom;
-    
-    // Calculate new pan to keep the same point under the mouse
-    const newPanX = mouseX - containerCenterX - canvasX * newZoom;
-    const newPanY = mouseY - containerCenterY - canvasY * newZoom;
-    
-    setZoom(newZoom);
-    setPan({ x: newPanX, y: newPanY });
-  };
-
-  const handleCenter = () => {
-    setPan({ x: 0, y: 0 });
-    setZoom(1);
-  };
-
 
   return (
     <div 
       ref={containerRef}
-      className={`relative w-full h-full overflow-hidden cursor-grab ${isPanning ? 'cursor-grabbing' : ''}`}
-      onMouseDown={handleCanvasMouseDown}
+      className="relative w-full h-full overflow-hidden"
       onMouseUp={handleCanvasMouseUp}
       onMouseLeave={handleCanvasMouseUp}
       onMouseMove={handleCanvasMouseMove}
       onClick={handleBackgroundClick}
-      onWheel={handleWheel}
     >
-      {/* Zoom Controls */}
-      <div className="absolute bottom-6 right-6 z-50 flex flex-col gap-2">
-        <button
-          onClick={handleCenter}
-          className="p-3 bg-slate-900/90 backdrop-blur-md border border-white/10 rounded-xl text-white hover:bg-slate-800 transition-colors shadow-lg"
-          title="Center Tree"
-        >
-          <Locate size={20} />
-        </button>
-        
-      </div>
       {/* SVG Filter for Organic Roughness (Hidden, but defined globally for reference if needed outside this SVG context) */}
       <svg style={{ position: 'absolute', width: 0, height: 0 }} aria-hidden="true">
         <defs>
@@ -251,19 +174,16 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
             height: '4000px',
             left: '-2000px', // Perfectly centers the 4000px box on the screen
             top: '-2000px',
-            transform: `scale(${scale})` 
+            transform: `scale(${scale * BASE_ZOOM})` 
           }}
         >
           {/* 
-            3. INTERNAL PAN/ZOOM LAYER: 
-            Handles user interaction (drag and scroll zoom).
+            3. INTERNAL CONTENT LAYER (Was Pan/Zoom): 
+            Now just holds content centered.
           */}
           <div 
-            className="w-full h-full origin-center will-change-transform" 
+            className="w-full h-full origin-center" 
             ref={canvasRef}
-            style={{ 
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            }}
           >
             {/* 
               4. CONTENT CONTAINER: 

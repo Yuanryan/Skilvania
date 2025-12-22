@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { OrganicTree } from '@/components/visualization/OrganicTree';
 import { Node, Edge } from '@/types';
-import { Save, Plus, Trash2, Edit3, ArrowLeft, Settings, Loader2 } from 'lucide-react';
+import { Save, Plus, Trash2, ArrowLeft, Settings, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { LessonEditorDrawer } from '@/components/creator/LessonEditorDrawer';
 
 export default function CreatorEditorPage() {
   const params = useParams();
@@ -18,6 +19,8 @@ export default function CreatorEditorPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [courseTitle, setCourseTitle] = useState('');
+  const [drawerWidth, setDrawerWidth] = useState(50);
+  const [isResizing, setIsResizing] = useState(false);
 
   // --- LOAD DATA ---
   useEffect(() => {
@@ -402,6 +405,20 @@ export default function CreatorEditorPage() {
         </div>
         <div className="flex items-center gap-2">
             <button 
+              onClick={addNode} 
+              className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold transition-colors"
+            >
+                <Plus size={16} /> Add Node
+            </button>
+            <button 
+              disabled={!selectedNodeId} 
+              onClick={deleteSelected} 
+              className="flex items-center gap-2 px-4 py-1.5 bg-red-900/50 hover:bg-red-600/80 border border-red-500/30 text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                <Trash2 size={16} /> Delete
+            </button>
+            <div className="h-6 w-[1px] bg-slate-700 mx-1"></div>
+            <button 
               onClick={handleSave}
               disabled={saving || loading}
               className="flex items-center gap-2 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-bold transition-colors"
@@ -422,98 +439,17 @@ export default function CreatorEditorPage() {
         </div>
       </header>
 
-      <div className="flex-1 relative flex">
-        
-        {/* Floating Toolbox */}
-        <div className="absolute top-6 left-6 z-40 flex flex-col gap-2 w-64">
-            <div className="bg-slate-900/90 border border-slate-700 p-4 rounded-xl shadow-2xl backdrop-blur">
-                <h3 className="text-white font-bold mb-3 flex items-center gap-2 text-sm uppercase tracking-wide"><Edit3 size={14} /> Toolbox</h3>
-                <div className="grid grid-cols-2 gap-2">
-                    <button onClick={addNode} className="bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition-colors">
-                        <Plus size={20} /> Add Node
-                    </button>
-                    <button disabled={!selectedNodeId} onClick={deleteSelected} className="bg-red-900/50 hover:bg-red-600/80 border border-red-500/30 text-white p-3 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        <Trash2 size={20} /> Delete
-                    </button>
-                </div>
-                <div className="mt-4 text-xs text-slate-500 space-y-1">
-                    <p>• Drag nodes to position</p>
-                    <p>• Click to select a node</p>
-                    <p>• Click another node to link</p>
-                </div>
-            </div>
-
-            {/* Node Properties Panel */}
-            {selectedNode && (
-               <div className="bg-slate-900/90 border border-slate-700 p-4 rounded-xl shadow-2xl backdrop-blur animate-slide-in mt-2">
-                 <h3 className="text-white font-bold mb-4 text-sm">Node Properties</h3>
-                 <div className="space-y-4">
-                    <div>
-                      <label className="text-[10px] uppercase text-slate-500 font-bold block mb-1">Title</label>
-                      <input 
-                        value={selectedNode.title} 
-                        onChange={(e) => updateNode(selectedNode.id, { title: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] uppercase text-slate-500 font-bold block mb-1">Type</label>
-                      <select 
-                        value={selectedNode.type}
-                        onChange={(e) => {
-                          const newType = e.target.value as any;
-                          // 根據 Type 自動設置對應的 Icon
-                          const iconMap: Record<string, string> = {
-                            'theory': 'Book',
-                            'code': 'Code',
-                            'project': 'Rocket',
-                            'guide': 'Map',
-                            'tutorial': 'GraduationCap',
-                            'checklist': 'CheckSquare',
-                            'resource': 'FileText'
-                          };
-                          const newIconName = iconMap[newType] || 'Code';
-                          updateNode(selectedNode.id, { type: newType, iconName: newIconName });
-                        }}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
-                      >
-                        <option value="theory">Theory (Reading)</option>
-                        <option value="code">Code Challenge</option>
-                        <option value="project">Project</option>
-                        <option value="guide">Guide (指南)</option>
-                        <option value="tutorial">Tutorial (教程)</option>
-                        <option value="checklist">Checklist (檢查清單)</option>
-                        <option value="resource">Resource (資源)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] uppercase text-slate-500 font-bold block mb-1">XP Reward</label>
-                      <input 
-                        type="number"
-                        value={selectedNode.xp} 
-                        onChange={(e) => updateNode(selectedNode.id, { xp: parseInt(e.target.value) || 0 })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
-                      />
-                    </div>
-                    
-                    <div className="pt-2 border-t border-white/5">
-                        <Link 
-                            href={`/creator/${params.courseId}/content/${selectedNode.id}`}
-                            className="block w-full text-center bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-2 rounded transition-colors"
-                        >
-                            Edit Lesson Content
-                        </Link>
-                    </div>
-                 </div>
-               </div>
-             )}
-        </div>
+      <div className="flex-1 relative flex overflow-hidden">
 
         {/* The Canvas */}
-        <div className="flex-1 bg-[#0f1115] relative overflow-hidden" style={{ 
+        <div 
+          className={`flex-1 bg-[#0f1115] relative overflow-hidden ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
+          style={{ 
               backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)', 
-              backgroundSize: '40px 40px' 
-        }}>
+              backgroundSize: '40px 40px',
+              transform: selectedNodeId ? `translateX(-${drawerWidth / 2}%)` : 'none',
+          }}
+        >
             {loading ? (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
@@ -528,11 +464,30 @@ export default function CreatorEditorPage() {
                 completedNodes={new Set()} // Creator mode ignores completed status
                 isCreatorMode={true}
                 onNodeClick={(node) => setSelectedNodeId(node.id)}
+                onBackgroundClick={() => setSelectedNodeId(null)}
                 onNodeDrag={handleNodeDrag}
                 onConnect={handleConnect}
+                scale={selectedNodeId ? Math.max(0.5, 1 - (drawerWidth / 150)) : 1}
+                disableTransition={isResizing}
               />
             )}
         </div>
+
+        {/* Lesson Editor Drawer */}
+        {selectedNodeId && selectedNode && (
+          <LessonEditorDrawer
+            courseId={courseId}
+            nodeId={selectedNode.id}
+            isOpen={!!selectedNodeId}
+            onClose={() => setSelectedNodeId(null)}
+            initialData={selectedNode}
+            onUpdateNode={updateNode}
+            width={drawerWidth}
+            onWidthChange={setDrawerWidth}
+            onResizeStart={() => setIsResizing(true)}
+            onResizeEnd={() => setIsResizing(false)}
+          />
+        )}
 
       </div>
     </div>

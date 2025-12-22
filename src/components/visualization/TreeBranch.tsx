@@ -36,15 +36,44 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
   // In Creator Mode, we want solid lines that update instantly, no fancy growth animation
   if (isCreatorMode) {
     return (
-      <path 
-        d={path} 
-        stroke="#475569" 
-        strokeWidth={thickness} 
-        strokeLinecap="round" 
-        fill="none" 
-        className="opacity-50"
-        markerEnd="url(#arrowhead)"
-      />
+      <g>
+        {/* Base static line */}
+        <path 
+          d={path} 
+          stroke="#475569" 
+          strokeWidth={thickness} 
+          strokeLinecap="round" 
+          fill="none" 
+          className="opacity-30"
+        />
+        
+        {/* Animated Flowing Segment */}
+        <path 
+          d={path} 
+          stroke="#94a3b8" // Lighter slate color for visibility
+          strokeWidth={thickness} 
+          strokeLinecap="round" 
+          fill="none" 
+          className="opacity-20"
+          style={{
+            strokeDasharray: `20 ${length}`, // Short segment (20px) followed by gap
+            strokeDashoffset: length,
+            animation: 'flowSegment 2s linear infinite',
+          }}
+        />
+        
+        {/* Define the Keyframes in a style tag locally or ensure it exists globally */}
+        <style jsx global>{`
+          @keyframes flowSegment {
+            from {
+              stroke-dashoffset: ${length};
+            }
+            to {
+              stroke-dashoffset: 0;
+            }
+          }
+        `}</style>
+      </g>
     );
   }
 
@@ -56,7 +85,7 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
         d={path} 
         stroke="#3f3c35" 
         strokeWidth={thickness} 
-        strokeLinecap="round"
+        strokeLinecap="round" 
         fill="none" 
         filter="url(#roughness-global)" 
         className="opacity-90"
@@ -74,7 +103,7 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
           d={path} 
           stroke={status === 'completed' ? "#10b981" : "#059669"} 
           strokeWidth={thickness / 2.5} 
-          strokeLinecap="round"
+          strokeLinecap="round" 
           fill="none" 
           style={{
              strokeDasharray: length,
