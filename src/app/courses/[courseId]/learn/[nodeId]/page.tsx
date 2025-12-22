@@ -13,7 +13,7 @@ interface NodeData {
   title: string;
   content: string;
   xp: number;
-  type: 'theory' | 'code' | 'project';
+  type: 'theory' | 'code' | 'project' | 'guide' | 'tutorial' | 'checklist' | 'resource';
   description: string | null;
 }
 
@@ -179,7 +179,13 @@ export default function LessonContentPage() {
           </Link>
           <div>
             <div className="text-xs text-emerald-500 font-bold uppercase tracking-wider mb-1">
-              {lesson.type === 'theory' ? 'Theory' : lesson.type === 'code' ? 'Code Challenge' : 'Project'}
+              {lesson.type === 'theory' ? 'Theory' : 
+               lesson.type === 'code' ? 'Code Challenge' : 
+               lesson.type === 'project' ? 'Project' :
+               lesson.type === 'guide' ? 'Guide' :
+               lesson.type === 'tutorial' ? 'Tutorial' :
+               lesson.type === 'checklist' ? 'Checklist' :
+               lesson.type === 'resource' ? 'Resource' : 'Theory'}
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-white">{lesson.title}</h1>
           </div>

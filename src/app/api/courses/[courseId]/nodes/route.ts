@@ -26,12 +26,12 @@ export async function POST(
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     }
 
-    if (!type || !['theory', 'code', 'project'].includes(type)) {
+    if (!type || !['theory', 'code', 'project', 'guide', 'tutorial', 'checklist', 'resource'].includes(type)) {
       return NextResponse.json({ error: 'Valid type is required' }, { status: 400 });
     }
 
-    if (typeof x !== 'number' || typeof y !== 'number' || x < 0 || x > 800 || y < 0 || y > 800) {
-      return NextResponse.json({ error: 'Valid coordinates (0-800) are required' }, { status: 400 });
+    if (typeof x !== 'number' || typeof y !== 'number' || x < 0 || x > 4000 || y < 0 || y > 4000) {
+      return NextResponse.json({ error: 'Valid coordinates (0-4000) are required' }, { status: 400 });
     }
 
     // 獲取當前使用者的 UserID

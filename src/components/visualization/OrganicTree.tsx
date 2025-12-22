@@ -37,6 +37,10 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   const canvasRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
+  
+  // 記錄 mousedown 時的滑鼠位置，用於區分點擊和拖曳
+  const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
+  const DRAG_THRESHOLD = 5; // 移動超過 5px 才視為拖曳
 
   // --- NODE STATUS LOGIC ---
   const getNodeStatus = (nodeId: string): NodeStatus => {
@@ -55,6 +59,9 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   const handleNodeMouseDown = (e: React.MouseEvent, node: Node) => {
     if (!isCreatorMode) return;
     e.stopPropagation();
+    
+    // 記錄 mousedown 時的滑鼠位置
+    mouseDownPosRef.current = { x: e.clientX, y: e.clientY };
     setDraggingId(node.id);
     isDraggingRef.current = false;
   };
@@ -73,6 +80,18 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
     // 1. Handle Node Dragging (Creator Mode)
     if (draggingId && canvasRef.current && onNodeDrag) {
+      // 檢查是否真的在拖曳（移動距離超過閾值）
+      if (mouseDownPosRef.current) {
+        const dx = e.clientX - mouseDownPosRef.current.x;
+        const dy = e.clientY - mouseDownPosRef.current.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // 只有移動距離超過閾值才視為拖曳
+        if (distance < DRAG_THRESHOLD) {
+          return; // 移動距離太小，不視為拖曳
+        }
+      }
+      
       isDraggingRef.current = true;
       
       // Get container and canvas positions
@@ -110,6 +129,8 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   };
 
   const handleCanvasMouseUp = () => {
+    // 重置拖曳相關狀態
+    mouseDownPosRef.current = null;
     setDraggingId(null);
     setIsPanning(false);
   };

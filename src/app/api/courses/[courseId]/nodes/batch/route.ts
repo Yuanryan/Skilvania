@@ -75,7 +75,7 @@ export async function PUT(
 
     // 先批量獲取所有需要的 TypeID
     const typeNames = [...new Set(validNodes
-      .filter((n: any) => n.type && ['theory', 'code', 'project'].includes(n.type))
+      .filter((n: any) => n.type && ['theory', 'code', 'project', 'guide', 'tutorial', 'checklist', 'resource'].includes(n.type))
       .map((n: any) => n.type)
     )];
     
@@ -101,10 +101,10 @@ export async function PUT(
       const numericNodeId = parseInt(node.nodeId);
       
       // 驗證座標（如果提供）- 允許浮點數，但會在更新時轉換為整數
-      if (node.x !== undefined && (typeof node.x !== 'number' || node.x < 0 || node.x > 800)) {
+      if (node.x !== undefined && (typeof node.x !== 'number' || node.x < 0 || node.x > 4000)) {
         return Promise.reject(new Error(`Invalid x coordinate for node ${node.nodeId}: ${node.x}`));
       }
-      if (node.y !== undefined && (typeof node.y !== 'number' || node.y < 0 || node.y > 800)) {
+      if (node.y !== undefined && (typeof node.y !== 'number' || node.y < 0 || node.y > 4000)) {
         return Promise.reject(new Error(`Invalid y coordinate for node ${node.nodeId}: ${node.y}`));
       }
 
@@ -117,7 +117,7 @@ export async function PUT(
       if (node.x !== undefined) updates.X = Math.round(node.x);
       if (node.y !== undefined) updates.Y = Math.round(node.y);
       if (node.title !== undefined) updates.Title = node.title.trim();
-      if (node.type !== undefined && ['theory', 'code', 'project'].includes(node.type)) {
+      if (node.type !== undefined && ['theory', 'code', 'project', 'guide', 'tutorial', 'checklist', 'resource'].includes(node.type)) {
         const typeID = typeIdMap.get(node.type);
         if (typeID) {
           updates.TypeID = typeID;
