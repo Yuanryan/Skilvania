@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, GripVertical, Image as ImageIcon, Video, Type, Plus, Trash2, Bold, Italic, Heading1, Heading2, Heading3, List, Link2, Code, Quote, Minus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -37,161 +37,88 @@ interface BlockEditorProps {
 export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
-  const addBlock = (index?: number) => {
-    const newBlock: ContentBlock = { type: 'markdown', content: '' };
-    
-    const newBlocks = [...blocks];
-    if (index !== undefined) {
-      newBlocks.splice(index + 1, 0, newBlock);
-    } else {
-      newBlocks.push(newBlock);
+  // 確保只有一個 block，如果沒有或有多個，則只保留第一個或創建一個
+  const currentBlock = blocks.length > 0 ? blocks[0] : { type: 'markdown' as const, content: '' };
+  
+  // 如果 blocks 不是只有一個，更新為只有一個
+  useEffect(() => {
+    if (blocks.length !== 1 || blocks[0].type !== 'markdown') {
+      onChange([currentBlock]);
     }
-    onChange(newBlocks);
-    setEditingIndex(index !== undefined ? index + 1 : newBlocks.length - 1);
-  };
+  }, []);
 
-  const updateBlock = (index: number, block: ContentBlock) => {
-    const newBlocks = [...blocks];
-    newBlocks[index] = block;
-    onChange(newBlocks);
-  };
-
-  const deleteBlock = (index: number) => {
-    const newBlocks = blocks.filter((_, i) => i !== index);
-    onChange(newBlocks);
-    if (editingIndex === index) {
-      setEditingIndex(null);
-    } else if (editingIndex !== null && editingIndex > index) {
-      setEditingIndex(editingIndex - 1);
-    }
+  const updateBlock = (block: ContentBlock) => {
+    onChange([block]);
   };
 
 
   return (
-    <div className="space-y-4">
-      {blocks.length === 0 && (
-        <div className="text-center py-12 text-slate-500">
-          <p className="mb-4">還沒有內容，點擊下方按鈕新增 Block</p>
-          <div className="flex gap-2 justify-center">
-            <button
-              onClick={() => addBlock()}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-            >
-              <Type size={16} /> 新增內容
-            </button>
-          </div>
-        </div>
-      )}
-
-      {blocks.map((block, index) => (
-        <div key={index} className="group relative border border-slate-700 rounded-lg p-4 bg-slate-900/50 hover:bg-slate-900 transition-colors">
-          {/* Block Header */}
-          <div className="flex items-center gap-2 mb-2">
-            <GripVertical className="text-slate-500 cursor-move" size={16} />
-            <span className="text-xs text-slate-500 font-bold uppercase">
-              Markdown
-            </span>
-            <div className="flex-1" />
-            <button
-              onClick={() => deleteBlock(index)}
-              className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity"
-            >
-              <Trash2 size={16} />
-            </button>
-          </div>
-
-          {/* Block Content */}
-          <div>
-            {editingIndex === index ? (
-              <MarkdownBlockEditor
-                block={block}
-                onUpdate={(content) => updateBlock(index, { ...block, content })}
-                onBlur={() => setEditingIndex(null)}
-              />
-            ) : (
-              <div
-                onClick={() => setEditingIndex(index)}
-                className="cursor-text p-3 rounded border border-transparent hover:border-slate-700 min-h-[100px]"
+    <div>
+      {editingIndex === 0 ? (
+        <MarkdownBlockEditor
+          block={currentBlock}
+          onUpdate={(content) => updateBlock({ ...currentBlock, content })}
+          onBlur={() => setEditingIndex(null)}
+        />
+      ) : (
+        <div
+          onClick={() => setEditingIndex(0)}
+          className="cursor-text p-3 rounded border border-transparent hover:border-slate-700 min-h-[100px]"
+        >
+          <div className="prose prose-invert prose-sm max-w-none">
+            {currentBlock.content ? (
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm]} 
+                rehypePlugins={[rehypeHighlight, rehypeRaw]}
+                components={{
+                  // 自定義圖片渲染，使用 ImageBlock 組件
+                  img: ({ node, ...props }) => {
+                    const { src, alt } = props as { src?: string; alt?: string };
+                    if (!src) return null;
+                    
+                    // 從 alt 文字中提取 caption（如果格式為 "alt|caption"）
+                    const [imageAlt, caption] = (alt || '').split('|');
+                    
+                    return (
+                      <ImageBlockComponent 
+                        url={src} 
+                        alt={imageAlt || undefined} 
+                        caption={caption || undefined} 
+                      />
+                    );
+                  },
+                  // 自定義連結渲染，檢測影片 URL
+                  a: ({ node, ...props }) => {
+                    const { href, children } = props as { href?: string; children?: React.ReactNode };
+                    if (!href) return <a {...props} />;
+                    
+                    // 如果是影片 URL，使用 VideoBlock 渲染
+                    if (isVideoUrl(href)) {
+                      const title = typeof children === 'string' ? children : undefined;
+                      return <VideoBlockComponent url={href} title={title} />;
+                    }
+                    
+                    // 否則使用普通連結
+                    return (
+                      <a 
+                        href={href} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-emerald-400 hover:text-emerald-300 underline"
+                        {...props}
+                      >
+                        {children}
+                      </a>
+                    );
+                  },
+                }}
               >
-                <div className="prose prose-invert prose-sm max-w-none">
-                  {block.content ? (
-                    <ReactMarkdown 
-                      remarkPlugins={[remarkGfm]} 
-                      rehypePlugins={[rehypeHighlight, rehypeRaw]}
-                      components={{
-                        // 自定義圖片渲染，使用 ImageBlock 組件
-                        img: ({ node, ...props }) => {
-                          const { src, alt } = props as { src?: string; alt?: string };
-                          if (!src) return null;
-                          
-                          // 從 alt 文字中提取 caption（如果格式為 "alt|caption"）
-                          const [imageAlt, caption] = (alt || '').split('|');
-                          
-                          return (
-                            <ImageBlockComponent 
-                              url={src} 
-                              alt={imageAlt || undefined} 
-                              caption={caption || undefined} 
-                            />
-                          );
-                        },
-                        // 自定義連結渲染，檢測影片 URL
-                        a: ({ node, ...props }) => {
-                          const { href, children } = props as { href?: string; children?: React.ReactNode };
-                          if (!href) return <a {...props} />;
-                          
-                          // 如果是影片 URL，使用 VideoBlock 渲染
-                          if (isVideoUrl(href)) {
-                            const title = typeof children === 'string' ? children : undefined;
-                            return <VideoBlockComponent url={href} title={title} />;
-                          }
-                          
-                          // 否則使用普通連結
-                          return (
-                            <a 
-                              href={href} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-emerald-400 hover:text-emerald-300 underline"
-                              {...props}
-                            >
-                              {children}
-                            </a>
-                          );
-                        },
-                      }}
-                    >
-                      {block.content}
-                    </ReactMarkdown>
-                  ) : (
-                    <p className="text-slate-500 italic">點擊編輯 Markdown 內容...</p>
-                  )}
-                </div>
-              </div>
+                {currentBlock.content}
+              </ReactMarkdown>
+            ) : (
+              <p className="text-slate-500 italic">點擊編輯 Markdown 內容...</p>
             )}
           </div>
-
-          {/* Add Block Buttons */}
-          <div className="mt-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={() => addBlock(index)}
-              className="px-2 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded flex items-center gap-1"
-            >
-              <Plus size={12} /> 新增內容
-            </button>
-          </div>
-        </div>
-      ))}
-
-      {/* Add Block at End */}
-      {blocks.length > 0 && (
-        <div className="flex gap-2 justify-center pt-4 border-t border-slate-700">
-          <button
-            onClick={() => addBlock()}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-          >
-            <Type size={16} /> 新增內容
-          </button>
         </div>
       )}
     </div>
@@ -214,6 +141,15 @@ function MarkdownBlockEditor({
   const isToolbarClickRef = useRef(false);
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [showVideoDialog, setShowVideoDialog] = useState(false);
+
+  // 自動調整 textarea 高度
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [block.content]);
 
   const insertMarkdown = (before: string, after: string = '', placeholder: string = '') => {
     const textarea = textareaRef.current;
@@ -617,9 +553,15 @@ function MarkdownBlockEditor({
             onBlur();
           }, 150);
         }}
-        className="w-full min-h-[200px] bg-slate-950 text-slate-200 font-mono text-sm p-3 rounded-b-lg border border-slate-700 border-t-0 focus:outline-none focus:border-emerald-500 resize-none"
+        className="w-full bg-slate-950 text-slate-200 font-mono text-sm p-3 rounded-b-lg border border-slate-700 border-t-0 focus:outline-none focus:border-emerald-500 resize-none"
         placeholder="輸入 Markdown 內容..."
         autoFocus
+        style={{ minHeight: '200px', height: 'auto' }}
+        onInput={(e) => {
+          const target = e.target as HTMLTextAreaElement;
+          target.style.height = 'auto';
+          target.style.height = `${target.scrollHeight}px`;
+        }}
       />
     </div>
   );

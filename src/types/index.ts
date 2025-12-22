@@ -22,7 +22,7 @@ export interface Course {
 
 // --- SKILL TREE ENGINE ---
 
-export type NodeType = 'theory' | 'code' | 'project';
+export type NodeType = 'theory' | 'code' | 'project' | 'guide' | 'tutorial' | 'checklist' | 'resource';
 
 export type NodeStatus = 'locked' | 'unlocked' | 'completed';
 

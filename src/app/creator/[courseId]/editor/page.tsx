@@ -92,6 +92,10 @@ export default function CreatorEditorPage() {
     }
   };
 
+  // Title 更新的防抖計時器和最後輸入值追蹤
+  const titleUpdateTimerRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const lastTitleInputRef = useRef<Record<string, string>>({});
+
   const updateNode = useCallback(async (id: string, updates: Partial<Node>) => {
     // 樂觀更新 UI
     setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
@@ -99,6 +103,56 @@ export default function CreatorEditorPage() {
     // 如果是位置更新，使用批量 API
     if (updates.x !== undefined || updates.y !== undefined) {
       // 延遲批量保存位置更新
+      return;
+    }
+
+    // 如果是 title 更新，使用防抖延遲保存
+    if (updates.title !== undefined) {
+      // 記錄最後一次輸入的值
+      lastTitleInputRef.current[id] = updates.title;
+      
+      // 清除之前的計時器
+      if (titleUpdateTimerRef.current[id]) {
+        clearTimeout(titleUpdateTimerRef.current[id]);
+      }
+      
+      // 設置新的防抖計時器
+      titleUpdateTimerRef.current[id] = setTimeout(async () => {
+        const titleToSave = lastTitleInputRef.current[id];
+        if (!titleToSave) return;
+        
+        try {
+          const response = await fetch(`/api/courses/${courseId}/nodes/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: titleToSave })
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to update node');
+          }
+
+          // 使用 API 返回的數據更新本地狀態（確保與資料庫同步）
+          const data = await response.json();
+          if (data.node) {
+            // 檢查當前輸入框的值是否和我們保存的值一致
+            // 如果不一致，說明用戶在我們保存期間又輸入了新值，保留用戶輸入的值
+            setNodes(prev => prev.map(n => {
+              if (n.id === id) {
+                const currentTitle = n.title;
+                const savedTitle = lastTitleInputRef.current[id];
+                // 如果當前值不等於我們保存的值，說明用戶又輸入了新值，保留當前值
+                const finalTitle = (currentTitle !== savedTitle) ? currentTitle : data.node.title;
+                return { ...n, ...data.node, title: finalTitle };
+              }
+              return n;
+            }));
+          }
+        } catch (error) {
+          console.error('Error updating node:', error);
+          // 不重新載入，避免打斷用戶輸入
+        }
+      }, 500); // 500ms 防抖
       return;
     }
 
@@ -117,7 +171,13 @@ export default function CreatorEditorPage() {
       // 使用 API 返回的數據更新本地狀態（確保與資料庫同步）
       const data = await response.json();
       if (data.node) {
-        setNodes(prev => prev.map(n => n.id === id ? { ...n, ...data.node } : n));
+        // 合併更新，而不是完全替換
+        setNodes(prev => prev.map(n => {
+          if (n.id === id) {
+            return { ...n, ...data.node };
+          }
+          return n;
+        }));
       }
     } catch (error) {
       console.error('Error updating node:', error);
@@ -406,7 +466,11 @@ export default function CreatorEditorPage() {
                           const iconMap: Record<string, string> = {
                             'theory': 'Book',
                             'code': 'Code',
-                            'project': 'Rocket'
+                            'project': 'Rocket',
+                            'guide': 'Map',
+                            'tutorial': 'GraduationCap',
+                            'checklist': 'CheckSquare',
+                            'resource': 'FileText'
                           };
                           const newIconName = iconMap[newType] || 'Code';
                           updateNode(selectedNode.id, { type: newType, iconName: newIconName });
@@ -416,6 +480,10 @@ export default function CreatorEditorPage() {
                         <option value="theory">Theory (Reading)</option>
                         <option value="code">Code Challenge</option>
                         <option value="project">Project</option>
+                        <option value="guide">Guide (指南)</option>
+                        <option value="tutorial">Tutorial (教程)</option>
+                        <option value="checklist">Checklist (檢查清單)</option>
+                        <option value="resource">Resource (資源)</option>
                       </select>
                     </div>
                     <div>

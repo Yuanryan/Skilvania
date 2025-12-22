@@ -132,14 +132,17 @@ export async function getTypeNames(
  * @param typeName 类型名称
  * @returns NodeType
  */
-export function typeNameToNodeType(typeName: string | null): 'theory' | 'code' | 'project' {
+export function typeNameToNodeType(typeName: string | null): 'theory' | 'code' | 'project' | 'guide' | 'tutorial' | 'checklist' | 'resource' {
   if (!typeName) {
     return 'theory';
   }
 
   const normalized = typeName.toLowerCase();
-  if (normalized === 'theory' || normalized === 'code' || normalized === 'project') {
-    return normalized as 'theory' | 'code' | 'project';
+  const validTypes: Array<'theory' | 'code' | 'project' | 'guide' | 'tutorial' | 'checklist' | 'resource'> = 
+    ['theory', 'code', 'project', 'guide', 'tutorial', 'checklist', 'resource'];
+  
+  if (validTypes.includes(normalized as any)) {
+    return normalized as 'theory' | 'code' | 'project' | 'guide' | 'tutorial' | 'checklist' | 'resource';
   }
 
   // 默认返回 theory
@@ -151,7 +154,7 @@ export function typeNameToNodeType(typeName: string | null): 'theory' | 'code' |
  * @param nodeType NodeType
  * @returns 类型名称
  */
-export function nodeTypeToTypeName(nodeType: 'theory' | 'code' | 'project'): string {
+export function nodeTypeToTypeName(nodeType: 'theory' | 'code' | 'project' | 'guide' | 'tutorial' | 'checklist' | 'resource'): string {
   return nodeType;
 }
 

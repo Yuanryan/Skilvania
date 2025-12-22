@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Eye, Loader2, Edit3 } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { ArrowLeft, Save, Eye, Loader2, Edit3, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { parseContent } from '@/types/content';
@@ -18,7 +18,11 @@ export default function ContentEditorPage() {
   const [nodeTitle, setNodeTitle] = useState('Loading...');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [viewMode, setViewMode] = useState<'split' | 'edit' | 'preview'>('split');
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedContentRef = useRef<string>('');
+  const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
     if (courseId && nodeId) {
@@ -40,6 +44,11 @@ export default function ContentEditorPage() {
       const parsedBlocks = parseContent(loadedContent);
       setBlocks(parsedBlocks);
       
+      // 記錄初始內容，用於比較是否有變更
+      lastSavedContentRef.current = JSON.stringify(parsedBlocks);
+      isInitialLoadRef.current = true;
+      setSaved(true);
+      
       setNodeTitle(data.title || 'Node Content');
     } catch (error) {
       console.error('Error loading content:', error);
@@ -49,11 +58,13 @@ export default function ContentEditorPage() {
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
+  const saveContent = useCallback(async (blocksToSave: ContentBlock[]) => {
     try {
+      setSaving(true);
+      setSaved(false);
+      
       // 始終使用 Block 格式儲存
-      const body = JSON.stringify({ blocks });
+      const body = JSON.stringify({ blocks: blocksToSave });
 
       const response = await fetch(`/api/courses/${courseId}/nodes/${nodeId}/content`, {
         method: 'PUT',
@@ -65,14 +76,72 @@ export default function ContentEditorPage() {
         throw new Error('Failed to save content');
       }
 
-      alert('Content saved successfully!');
+      // 記錄已保存的內容
+      lastSavedContentRef.current = JSON.stringify(blocksToSave);
+      setSaved(true);
+      
+      // 3秒後隱藏保存成功提示
+      setTimeout(() => {
+        setSaved(false);
+      }, 3000);
     } catch (error) {
       console.error('Error saving content:', error);
-      alert('Failed to save content');
+      setSaved(false);
     } finally {
       setSaving(false);
     }
+  }, [courseId, nodeId]);
+
+  // 自動保存：監聽 blocks 變化
+  useEffect(() => {
+    // 跳過初始載入
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    // 檢查內容是否有變更
+    const currentContent = JSON.stringify(blocks);
+    if (currentContent === lastSavedContentRef.current) {
+      return; // 沒有變更，不需要保存
+    }
+
+    // 清除之前的計時器
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+
+    // 設置新的防抖計時器（2秒後保存）
+    saveTimerRef.current = setTimeout(() => {
+      saveContent(blocks);
+    }, 2000);
+
+    // 清理函數
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, [blocks, saveContent]);
+
+  // 手動保存（保留原有功能）
+  const handleSave = async () => {
+    // 清除自動保存計時器
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    await saveContent(blocks);
   };
+
+  // 清理計時器
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col">
@@ -126,6 +195,20 @@ export default function ContentEditorPage() {
                 <Eye size={14} className="inline mr-1" /> Preview
             </button>
             </div>
+            {/* Auto-save Status */}
+            {(saving || saved) && (
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                {saving ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Saving...
+                  </>
+                ) : saved ? (
+                  <>
+                    <CheckCircle2 size={14} className="text-emerald-500" /> Saved
+                  </>
+                ) : null}
+              </div>
+            )}
             <button 
               onClick={handleSave}
               disabled={saving || loading}
@@ -173,16 +256,16 @@ export default function ContentEditorPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex-1 flex overflow-hidden">
+              <div className="flex-1 flex overflow-auto">
                 {/* Editor Panel */}
                 {(viewMode === 'edit' || viewMode === 'split') && (
-                  <div className={`${viewMode === 'split' ? 'w-1/2' : 'w-full'} border-r border-white/5 flex flex-col overflow-hidden`}>
+                  <div className={`${viewMode === 'split' ? 'w-1/2' : 'w-full'} border-r border-white/5 flex flex-col`}>
                     <div className="bg-slate-900/50 border-b border-white/5 px-4 py-2 flex-shrink-0">
                       <h3 className="text-xs text-slate-400 font-bold uppercase">
                         Block Editor
                       </h3>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                    <div className="flex-1 p-6">
                       <BlockEditor blocks={blocks} onChange={setBlocks} />
                     </div>
                   </div>
@@ -190,11 +273,11 @@ export default function ContentEditorPage() {
 
                 {/* Preview Panel */}
                 {(viewMode === 'preview' || viewMode === 'split') && (
-                  <div className={`${viewMode === 'split' ? 'w-1/2' : 'w-full'} flex flex-col overflow-hidden`}>
+                  <div className={`${viewMode === 'split' ? 'w-1/2' : 'w-full'} flex flex-col`}>
                     <div className="bg-slate-900/50 border-b border-white/5 px-4 py-2 flex-shrink-0">
                       <h3 className="text-xs text-slate-400 font-bold uppercase">Preview</h3>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-6 markdown-content custom-scrollbar">
+                    <div className="flex-1 p-6 markdown-content">
                       <BlockRenderer blocks={blocks} />
                     </div>
                   </div>
