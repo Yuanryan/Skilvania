@@ -52,14 +52,80 @@ export default function CreatorEditorPage() {
 
   // --- ACTIONS ---
 
+  // 取消連線模式的輔助函數
+  const cancelConnectionMode = () => {
+    if (isConnecting) {
+      setIsConnecting(false);
+      setConnectSourceId(null);
+    }
+  };
+
   const addNode = async () => {
+    // 任何其他操作都應該先取消連線模式
+    cancelConnectionMode();
+    
+    // 如果抽屜寬度太小（被收起），重置為默認寬度，確保抽屜打開
+    if (drawerWidth < 5) {
+      setDrawerWidth(50);
+    }
+    
+    // Helper to find a free position
+    const findFreePosition = (baseX: number, baseY: number): { x: number, y: number } => {
+      const MIN_DISTANCE = 150; // Minimum distance between centers
+      
+      // Check if a position is valid (not too close to existing nodes)
+      const isValid = (x: number, y: number) => {
+        return !nodes.some(node => {
+          const dx = node.x - x;
+          const dy = node.y - y;
+          return Math.sqrt(dx * dx + dy * dy) < MIN_DISTANCE;
+        });
+      };
+
+      // 1. Try center first
+      if (isValid(baseX, baseY)) return { x: baseX, y: baseY };
+
+      // 2. Spiral search out
+      let radius = MIN_DISTANCE;
+      const MAX_RADIUS = 2000; // Don't go too far
+      
+      while (radius < MAX_RADIUS) {
+        // Circumference ≈ 2 * PI * radius
+        // Number of steps ≈ circumference / MIN_DISTANCE
+        const steps = Math.max(8, Math.floor((2 * Math.PI * radius) / MIN_DISTANCE));
+        const angleStep = (2 * Math.PI) / steps;
+
+        for (let i = 0; i < steps; i++) {
+          const angle = i * angleStep;
+          const x = baseX + Math.cos(angle) * radius;
+          const y = baseY + Math.sin(angle) * radius;
+
+          // Check boundaries (keep some padding from 0 and 4000)
+          if (x > 100 && x < 3900 && y > 100 && y < 3900) {
+            if (isValid(x, y)) {
+              return { x, y };
+            }
+          }
+        }
+        radius += MIN_DISTANCE;
+      }
+      
+      // Fallback: Random offset
+      return { 
+        x: baseX + (Math.random() - 0.5) * 200, 
+        y: baseY + (Math.random() - 0.5) * 200 
+      };
+    };
+
+    const { x, y } = findFreePosition(2000, 2000);
+
     const newNode: Node = { 
       id: 'temp-' + Date.now(), 
       title: "New Skill", 
       xp: 100, 
       type: "code", 
-      x: 800, 
-      y: 800, 
+      x, 
+      y, 
       iconName: 'Code' 
     };
     
@@ -208,7 +274,18 @@ export default function CreatorEditorPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nodes: validNodes.map(n => ({ nodeId: n.id, x: n.x, y: n.y }))
+          nodes: validNodes.map(n => ({ 
+            nodeId: n.id, 
+            x: n.x, 
+            y: n.y,
+            // 確保這些欄位也包含在內，即使是 undefined 也無妨，後端應該會處理部分更新
+            // 但最好只發送 x 和 y，或者確保其他必填欄位存在
+            title: n.title,
+            type: n.type,
+            xp: n.xp,
+            iconName: n.iconName,
+            description: n.description
+          }))
         })
       });
 
@@ -245,6 +322,9 @@ export default function CreatorEditorPage() {
   }, [saveNodePositions]);
 
   const deleteSelected = async () => {
+    // 任何其他操作都應該先取消連線模式
+    cancelConnectionMode();
+
     if (!selectedNodeId) return;
 
     const nodeId = selectedNodeId;
@@ -252,7 +332,28 @@ export default function CreatorEditorPage() {
     // 樂觀更新 UI
     setEdges(prev => prev.filter(e => e.from !== nodeId && e.to !== nodeId));
     setNodes(prev => prev.filter(n => n.id !== nodeId));
-    setSelectedNodeId(null);
+    
+    // Find closest node to switch selection to, instead of closing drawer
+    const currentNode = nodes.find(n => n.id === nodeId);
+    if (currentNode) {
+      let closestNode: Node | null = null;
+      let minDistance = Infinity;
+      
+      nodes.forEach(n => {
+        if (n.id === nodeId) return;
+        const dx = n.x - currentNode.x;
+        const dy = n.y - currentNode.y;
+        const dist = dx * dx + dy * dy; // Compare squared distance to save sqrt
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestNode = n;
+        }
+      });
+      
+      setSelectedNodeId(closestNode ? (closestNode as Node).id : null);
+    } else {
+      setSelectedNodeId(null);
+    }
 
     // 刪除後端節點（級聯刪除連接）
     try {
@@ -334,6 +435,9 @@ export default function CreatorEditorPage() {
   };
 
   const handleSave = async () => {
+    // 任何其他操作都應該先取消連線模式
+    cancelConnectionMode();
+
     setSaving(true);
     try {
       // 清除防抖計時器
@@ -408,6 +512,12 @@ export default function CreatorEditorPage() {
   };
 
   const startConnection = () => {
+    // 如果已經在連線模式，再次點擊則取消
+    if (isConnecting) {
+      cancelConnectionMode();
+      return;
+    }
+
     if (!selectedNodeId) {
       alert('請先選取來源節點，再新增連線。');
       return;
@@ -437,12 +547,12 @@ export default function CreatorEditorPage() {
             </button>
             <button 
               onClick={startConnection}
-              disabled={!selectedNodeId}
+              disabled={!selectedNodeId && !isConnecting} // 如果正在連線，允許點擊以取消
               className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${
-                !selectedNodeId
+                !selectedNodeId && !isConnecting
                   ? 'bg-slate-800/60 text-slate-400 border border-slate-700 cursor-not-allowed'
                   : isConnecting 
-                    ? 'bg-emerald-700 text-white border border-emerald-400/50' 
+                    ? 'bg-emerald-700 text-white border border-emerald-400/50 hover:bg-emerald-600' 
                     : 'bg-emerald-900/60 hover:bg-emerald-700 text-emerald-200 border border-emerald-500/30'
               }`}
             >

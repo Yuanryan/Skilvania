@@ -27,7 +27,7 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
       ${end.x} ${end.y}
   `;
 
-  const normalizeY = Math.max(0, Math.min(1, start.y / 1600)); 
+  const normalizeY = Math.max(0, Math.min(1, start.y / 4000)); 
   const thickness = 4 + (normalizeY * 10); 
 
   const delay = getDelay(start.y);

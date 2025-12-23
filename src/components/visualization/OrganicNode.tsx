@@ -57,8 +57,8 @@ export const OrganicNode: React.FC<OrganicNodeProps> = ({
         selectedStyle
       )}
       style={{ 
-        left: `${(node.x / 1600) * 100}%`, // Assuming 1600 width base
-        top: `${(node.y / 1600) * 100}%`,  // Assuming 1600 height base
+        left: `${(node.x / 4000) * 100}%`, // Assuming 4000 width base
+        top: `${(node.y / 4000) * 100}%`,  // Assuming 4000 height base
       }}
       initial={!isCreatorMode ? { scale: 0, opacity: 0 } : { scale: 1, opacity: 1 }}
       animate={!isCreatorMode ? { scale: isSelected ? 1.25 : 1, opacity: 1 } : { scale: isSelected ? 1.1 : 1, opacity: 1 }}

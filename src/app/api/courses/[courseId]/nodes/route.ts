@@ -30,8 +30,8 @@ export async function POST(
       return NextResponse.json({ error: 'Valid type is required' }, { status: 400 });
     }
 
-    if (typeof x !== 'number' || typeof y !== 'number' || x < 0 || x > 4000 || y < 0 || y > 4000) {
-      return NextResponse.json({ error: 'Valid coordinates (0-4000) are required' }, { status: 400 });
+    if (typeof x !== 'number' || typeof y !== 'number' || x < -2000 || x > 6000 || y < -2000 || y > 6000) {
+      return NextResponse.json({ error: 'Valid coordinates (-2000 to 6000) are required' }, { status: 400 });
     }
 
     // 獲取當前使用者的 UserID
@@ -124,8 +124,8 @@ export async function POST(
         CourseID: parseInt(courseId),
         Title: title.trim(),
         TypeID: typeID,
-        X: x,
-        Y: y,
+        X: Math.round(x), // Ensure integer
+        Y: Math.round(y), // Ensure integer
         XP: xp || 100,
         IconName: iconName || 'Code',
         Description: description?.trim() || null

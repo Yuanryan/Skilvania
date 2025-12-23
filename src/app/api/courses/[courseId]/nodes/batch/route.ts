@@ -101,10 +101,10 @@ export async function PUT(
       const numericNodeId = parseInt(node.nodeId);
       
       // 驗證座標（如果提供）- 允許浮點數，但會在更新時轉換為整數
-      if (node.x !== undefined && (typeof node.x !== 'number' || node.x < 0 || node.x > 4000)) {
+      if (node.x !== undefined && (typeof node.x !== 'number' || node.x < -2000 || node.x > 6000)) {
         return Promise.reject(new Error(`Invalid x coordinate for node ${node.nodeId}: ${node.x}`));
       }
-      if (node.y !== undefined && (typeof node.y !== 'number' || node.y < 0 || node.y > 4000)) {
+      if (node.y !== undefined && (typeof node.y !== 'number' || node.y < -2000 || node.y > 6000)) {
         return Promise.reject(new Error(`Invalid y coordinate for node ${node.nodeId}: ${node.y}`));
       }
 
@@ -137,9 +137,15 @@ export async function PUT(
       }
 
       // 確保至少有一個欄位要更新（除了 UpdatedAt）
-      const hasUpdates = Object.keys(updates).length > 1;
+      // 當所有欄位都是 undefined 時，只會剩下 UpdatedAt，這種情況下我們不應該執行更新
+      // 但是為了防止 Promise.allSettled 報錯，我們可以返回一個空的成功結果
+      // 不過如果只有 UpdatedAt，其實也可以更新，只是沒有改變數據
+      // 這裡我們放寬條件，如果有任何有效更新（包括 x, y, title 等），就執行更新
+      // 構建 updates 對象時已經只包含有值的欄位了
+      
+      const hasUpdates = Object.keys(updates).length > 1; // UpdatedAt 總是存在，所以大於 1
       if (!hasUpdates) {
-        console.warn(`No updates provided for node ${node.nodeId}, skipping`);
+        console.warn(`No effective updates provided for node ${node.nodeId}, skipping DB call but returning success`);
         return Promise.resolve({ data: null, error: null });
       }
 

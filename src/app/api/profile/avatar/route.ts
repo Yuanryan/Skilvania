@@ -79,17 +79,19 @@ export async function POST(request: NextRequest) {
       });
 
     if (uploadError) {
+      // Some SDK versions do not expose statusCode on StorageError typings
+      const statusCode = (uploadError as any)?.statusCode as number | undefined;
       console.error('Error uploading avatar:', {
         error: uploadError,
-        code: uploadError.error,
+        code: statusCode,
         message: uploadError.message,
-        statusCode: uploadError.statusCode,
+        statusCode,
         filePath,
         userId
       });
       
       // Check if bucket doesn't exist
-      if (uploadError.message?.includes('Bucket not found') || uploadError.error === 'Bucket not found') {
+      if (uploadError.message?.includes('Bucket not found') || statusCode === 404) {
         return NextResponse.json(
           { 
             error: 'Storage bucket not configured',
@@ -100,7 +102,7 @@ export async function POST(request: NextRequest) {
       }
       
       // Check if it's a permission error
-      if (uploadError.message?.includes('permission') || uploadError.message?.includes('policy') || uploadError.statusCode === 403) {
+      if (uploadError.message?.includes('permission') || uploadError.message?.includes('policy') || statusCode === 403) {
         return NextResponse.json(
           { 
             error: 'Permission denied',
@@ -111,7 +113,7 @@ export async function POST(request: NextRequest) {
       }
       
       // If file already exists, try to get the existing URL
-      if (uploadError.message?.includes('already exists') || uploadError.error === 'Duplicate') {
+      if (uploadError.message?.includes('already exists') || statusCode === 409) {
         const { data: urlData } = supabase.storage
           .from('avatars')
           .getPublicUrl(filePath);
@@ -140,9 +142,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { 
           error: 'Failed to upload avatar',
-          details: uploadError.message || uploadError.error || 'Unknown error',
-          code: uploadError.error,
-          statusCode: uploadError.statusCode
+          details: uploadError.message || 'Unknown error',
+          code: statusCode,
+          statusCode
         },
         { status: 500 }
       );

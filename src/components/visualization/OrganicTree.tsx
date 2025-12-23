@@ -41,6 +41,9 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   const isControlledSelection = externalSelectedNodeId !== null;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [isPanning, setIsPanning] = useState(false);
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -48,6 +51,7 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   
   // 記錄 mousedown 時的滑鼠位置，用於區分點擊和拖曳
   const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
+  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
   const DRAG_THRESHOLD = 5; // 移動超過 5px 才視為拖曳
 
   // --- NODE STATUS LOGIC ---
@@ -89,35 +93,80 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
         if (distance >= DRAG_THRESHOLD) {
           isDraggingRef.current = true;
         }
-        // 即使距離小於閾值，也繼續處理（允許初始拖曳），但不會標記為拖曳（避免觸發點擊）
       }
       
-      // 一旦開始拖曳（draggingId 存在），就立即更新位置
       // Get container and canvas positions
       const containerRect = containerRef.current.getBoundingClientRect();
       const containerCenterX = containerRect.width / 2;
       const containerCenterY = containerRect.height / 2;
       
       // Calculate mouse position relative to container center
-      // Since zoom/pan are removed, the only transform affecting screen space is (scale * BASE_ZOOM).
-      // Convert from screen pixels back into the 1600x1600 logical space.
-      const effectiveScale = scale * BASE_ZOOM;
-      const relativeX = (e.clientX - containerRect.left - containerCenterX) / effectiveScale;
-      const relativeY = (e.clientY - containerRect.top - containerCenterY) / effectiveScale;
+      // Account for external scale, internal pan, and internal zoom
+      const externalScale = scale * BASE_ZOOM;
+      const totalScale = externalScale * zoom;
       
-      // Convert to SVG coordinates (0-1600 range), SVG is centered at (0,0) in canvas space
-      const x = Math.max(0, Math.min(1600, relativeX + 800));
-      const y = Math.max(0, Math.min(1600, relativeY + 800));
+      const relativeX = (e.clientX - containerRect.left - containerCenterX) / totalScale - pan.x;
+      const relativeY = (e.clientY - containerRect.top - containerCenterY) / totalScale - pan.y;
+      
+      // Convert to SVG coordinates (0-4000 range), SVG is centered at (0,0) in canvas space
+      const x = Math.max(0, Math.min(4000, relativeX + 2000));
+      const y = Math.max(0, Math.min(4000, relativeY + 2000));
   
       onNodeDrag(draggingId, x, y);
       return;
+    }
+
+    // 2. Handle Panning
+    if (isPanning && lastMousePosRef.current) {
+      const dx = e.clientX - lastMousePosRef.current.x;
+      const dy = e.clientY - lastMousePosRef.current.y;
+      
+      const externalScale = scale * BASE_ZOOM;
+      // We divide by externalScale because pan is applied inside the external scale layer
+      setPan(prev => ({
+        x: prev.x + dx / (externalScale * zoom),
+        y: prev.y + dy / (externalScale * zoom)
+      }));
+      
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+      
+      // If we move enough, mark as dragging to prevent background click
+      if (mouseDownPosRef.current) {
+        const totalDx = e.clientX - mouseDownPosRef.current.x;
+        const totalDy = e.clientY - mouseDownPosRef.current.y;
+        if (Math.sqrt(totalDx * totalDx + totalDy * totalDy) > DRAG_THRESHOLD) {
+          isDraggingRef.current = true;
+        }
+      }
     }
   };
 
   const handleCanvasMouseUp = () => {
     // 重置拖曳相關狀態
     mouseDownPosRef.current = null;
+    lastMousePosRef.current = null;
     setDraggingId(null);
+    setIsPanning(false);
+  };
+
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return; // Only left click
+    
+    mouseDownPosRef.current = { x: e.clientX, y: e.clientY };
+    lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+    isDraggingRef.current = false;
+    
+    // If we're not clicking on a node (stopped propagation), start panning
+    setIsPanning(true);
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    // Standard wheel zoom logic
+    const delta = -e.deltaY;
+    const factor = Math.pow(1.1, delta / 100);
+    const newZoom = Math.min(Math.max(zoom * factor, 0.1), 5);
+    
+    setZoom(newZoom);
   };
 
   const handleNodeClick = (node: Node) => {
@@ -137,13 +186,24 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
     }
   };
 
-  const handleBackgroundClick = () => {
+  const handleBackgroundClick = (e: React.MouseEvent) => {
+    // If we were just dragging or panning, don't trigger background click
+    if (isDraggingRef.current) {
+      isDraggingRef.current = false;
+      return;
+    }
+
     if (!isControlledSelection) {
       setSelectedNodeId(null);
     }
     if (onBackgroundClick) {
       onBackgroundClick();
     }
+  };
+
+  const resetView = () => {
+    setPan({ x: 0, y: 0 });
+    setZoom(1);
   };
 
   // Sync selection when external selection changes
@@ -156,12 +216,28 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
   return (
     <div 
       ref={containerRef}
-      className="relative w-full h-full overflow-hidden"
+      className={`relative w-full h-full overflow-hidden ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
+      onMouseDown={handleCanvasMouseDown}
       onMouseUp={handleCanvasMouseUp}
       onMouseLeave={handleCanvasMouseUp}
       onMouseMove={handleCanvasMouseMove}
       onClick={handleBackgroundClick}
+      onWheel={handleWheel}
     >
+      {/* Reset View Button */}
+      <div className="absolute bottom-6 right-6 z-40 flex flex-col gap-2">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            resetView();
+          }}
+          className="p-3 bg-slate-900/80 backdrop-blur-md border border-white/10 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-all shadow-lg group"
+          title="Reset View"
+        >
+          <Locate size={20} className="group-hover:scale-110 transition-transform" />
+        </button>
+      </div>
+
       {/* SVG Filter for Organic Roughness (Hidden, but defined globally for reference if needed outside this SVG context) */}
       <svg style={{ position: 'absolute', width: 0, height: 0 }} aria-hidden="true">
         <defs>
@@ -194,18 +270,21 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
           }}
         >
           {/* 
-            3. INTERNAL CONTENT LAYER (Was Pan/Zoom): 
-            Now just holds content centered.
+            3. INTERNAL CONTENT LAYER: 
+            Handles manual pan and zoom.
           */}
           <div 
-            className="w-full h-full origin-center" 
+            className="w-full h-full origin-center will-change-transform" 
             ref={canvasRef}
+            style={{
+              transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`
+            }}
           >
             {/* 
               4. CONTENT CONTAINER: 
               Exactly centered inside the 4000px canvas.
             */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1600px] h-[1600px]">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[4000px] h-[4000px]">
               {/* Center Crosshair */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0 opacity-50">
                 <div className="absolute w-16 h-[1px] bg-slate-400 -translate-x-1/2"></div>
@@ -214,7 +293,7 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
 
               <svg 
                 className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" 
-                viewBox="0 0 1600 1600" 
+                viewBox="0 0 4000 4000" 
                 preserveAspectRatio="xMidYMid meet"
               >
                 <defs>
@@ -252,7 +331,7 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
               </svg>
 
               {/* Nodes Container */}
-              <div className="absolute inset-0 w-[1600px] h-[1600px]">
+              <div className="absolute inset-0 w-[4000px] h-[4000px]">
                 {nodes.map(node => (
                   <OrganicNode 
                     key={node.id} 
