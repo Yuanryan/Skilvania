@@ -5,12 +5,14 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import rehypeHighlight from 'rehype-highlight';
-import rehypeRaw from 'rehype-raw';
+import rehypeKatex from 'rehype-katex';
 import { ContentBlock } from '@/types/content';
 import ImageBlock from '@/components/content/ImageBlock';
 import VideoBlock from '@/components/content/VideoBlock';
 import 'highlight.js/styles/github-dark.css';
+import 'katex/dist/katex.min.css'; // 引入 KaTeX 樣式
 
 /**
  * 檢測是否為影片 URL
@@ -63,12 +65,28 @@ function BlockComponent({ block }: { block: ContentBlock }) {
   return (
     <div className="prose prose-invert prose-emerald max-w-none markdown-content">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight, rehypeRaw]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeHighlight, rehypeKatex]}
         components={{
           // 自定義段落渲染，避免 p 標籤內部嵌套 div
-          p: ({ node, ...props }) => {
-            return <div className="mb-4" {...props} />;
+          p: ({ node, children, ...props }) => {
+            return <div className="mb-4" {...props}>{children}</div>;
+          },
+          // 自定義 pre 標籤（程式碼塊容器），加入自定義滾動條
+          pre: ({ node, children, className, ...props }) => {
+            return (
+              <div className="my-6 rounded-lg overflow-hidden border border-white/10 bg-[#0d1117] group">
+                <div className="flex items-center justify-between px-4 py-1.5 bg-white/5 border-b border-white/5"> 
+                  <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Code</span>
+                </div>
+                <pre 
+                  className={`custom-scrollbar overflow-auto p-4 !bg-transparent !m-0 !border-none ${className || ''}`} 
+                  {...props} 
+                >
+                  {children}
+                </pre>
+              </div>
+            );
           },
           // 自定義圖片渲染，使用 ImageBlock 組件
           img: ({ node, ...props }) => {
@@ -87,9 +105,9 @@ function BlockComponent({ block }: { block: ContentBlock }) {
             );
           },
           // 自定義連結渲染，檢測影片 URL
-          a: ({ node, ...props }) => {
-            const { href, children } = props as { href?: string; children?: React.ReactNode };
-            if (!href) return <a {...props} />;
+          a: ({ node, children, ...props }) => {
+            const { href } = props as { href?: string };
+            if (!href) return <a {...props}>{children}</a>;
             
             // 如果是影片 URL，使用 VideoBlock 渲染
             if (isVideoUrl(href)) {

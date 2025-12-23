@@ -37,27 +37,7 @@ export default function CreatorDashboardPage() {
   }, []);
 
   // 關閉下拉選單當點擊外部
-  // handleClickOutside 已移除，根據用戶要求
-  // useEffect(() => {
-  //   const handleClickOutside = (event: MouseEvent) => {
-  //     if (openMenuId) {
-  //       const target = event.target as Node;
-  //       const buttonElement = menuRefs.current[openMenuId];
-  //       const menuElement = document.getElementById(`menu-${openMenuId}`);
-  //       
-  //       if (buttonElement && !buttonElement.contains(target) && 
-  //           menuElement && !menuElement.contains(target)) {
-  //         setOpenMenuId(null);
-  //         setMenuPosition(null);
-  //       }
-  //     }
-  //   };
-  //
-  //   if (openMenuId) {
-  //     document.addEventListener('mousedown', handleClickOutside);
-  //   }
-  //   return () => document.removeEventListener('mousedown', handleClickOutside);
-  // }, [openMenuId]);
+
 
   const fetchCourses = async () => {
     try {
@@ -112,16 +92,7 @@ export default function CreatorDashboardPage() {
     const value = e.target.value;
     setTagInput(value);
     
-    // 如果输入包含空格，自动创建tag
-    if (value.includes(' ')) {
-      const parts = value.split(' ').filter(p => p.trim());
-      if (parts.length > 0) {
-        // 最后一个部分保留在输入框中，其他部分创建为tag
-        const tagsToAdd = parts.slice(0, -1);
-        tagsToAdd.forEach(tag => handleAddTag(tag));
-        setTagInput(parts[parts.length - 1]);
-      }
-    }
+    
   };
 
   const handleCreateCourse = async () => {
@@ -241,6 +212,7 @@ export default function CreatorDashboardPage() {
   };
 
   const toggleMenu = (courseId: string, event: React.MouseEvent<HTMLButtonElement>) => {
+    console.log("Toggle Menu for:", courseId);
     if (openMenuId === courseId) {
       setOpenMenuId(null);
       setMenuPosition(null);

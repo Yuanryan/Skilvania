@@ -34,6 +34,7 @@ export function LessonEditorDrawer({
   onResizeEnd
 }: LessonEditorDrawerProps) {
   // const [activeTab, setActiveTab] = useState<'settings' | 'content'>('settings'); // Removed tab state
+  const [isResizing, setIsResizing] = useState(false);
   const isResizingRef = useRef(false);
   const [isDrawerCollapsed, setIsDrawerCollapsed] = useState(false);
   const [prevWidth, setPrevWidth] = useState(width);
@@ -157,6 +158,7 @@ export function LessonEditorDrawer({
     const handleMouseUp = () => {
       if (isResizingRef.current) {
         isResizingRef.current = false;
+        setIsResizing(false);
         document.body.style.cursor = 'default';
         document.body.style.userSelect = 'auto';
         if (onResizeEnd) onResizeEnd();
@@ -177,6 +179,7 @@ export function LessonEditorDrawer({
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
     isResizingRef.current = true;
+    setIsResizing(true);
     document.body.style.cursor = 'ew-resize';
     document.body.style.userSelect = 'none';
     if (onResizeStart) onResizeStart();
@@ -275,7 +278,7 @@ export function LessonEditorDrawer({
     <>
       {/* Drawer Container */}
       <div 
-        className="absolute right-0 top-0 bottom-0 bg-slate-900/95 backdrop-blur-xl border-l border-white/10 shadow-2xl flex flex-col z-50 transition-all duration-300 ease-in-out"
+        className={`absolute right-0 top-0 bottom-0 bg-slate-900/95 backdrop-blur-xl border-l border-white/10 shadow-2xl flex flex-col z-50 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
         style={{ width: isDrawerCollapsed ? '0px' : `${width}%` }}
       >
          {/* Toggle Button - Attached to the left edge of the drawer */}
@@ -431,7 +434,7 @@ export function LessonEditorDrawer({
                       <div className={`flex flex-col border-r border-white/5 bg-slate-900/30 ${
                         viewMode === 'split' ? 'w-1/2' : 'w-full'
                       }`}>
-                         <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                         <div className="flex-1 overflow-hidden">
                            <BlockEditor 
                              blocks={blocks} 
                              onChange={setBlocks} 

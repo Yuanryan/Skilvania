@@ -277,7 +277,7 @@ function ImageWithZoom({
 
           {/* 圖片容器 */}
           <div
-            className="relative max-w-[90vw] max-h-[90vh] overflow-auto"
+            className="relative max-w-[90vw] max-h-[90vh] overflow-auto custom-scrollbar"
             onClick={(e) => e.stopPropagation()}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}

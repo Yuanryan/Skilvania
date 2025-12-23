@@ -67,8 +67,11 @@
 
 @utility custom-scrollbar {
   &::-webkit-scrollbar { width: 4px; height: 4px; }
-  &::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
-  &::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; }
+  &::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
 @utility no-scrollbar {
@@ -172,6 +175,26 @@ body {
   overflow-x: auto;
   margin-top: 1.25em;
   margin-bottom: 1.25em;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.markdown-content pre::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.markdown-content pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.markdown-content pre::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+}
+
+.markdown-content pre::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 .markdown-content pre code {

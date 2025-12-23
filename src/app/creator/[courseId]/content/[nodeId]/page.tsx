@@ -266,7 +266,7 @@ export default function ContentEditorPage() {
                         Block Editor
                       </h3>
                     </div>
-                    <div className="flex-1 p-6">
+                    <div className="flex-1 overflow-hidden">
                       <BlockEditor 
                         blocks={blocks} 
                         onChange={setBlocks} 
@@ -283,7 +283,7 @@ export default function ContentEditorPage() {
                     <div className="bg-slate-900/50 border-b border-white/5 px-4 py-2 flex-shrink-0">
                       <h3 className="text-xs text-slate-400 font-bold uppercase">Preview</h3>
                     </div>
-                    <div className="flex-1 p-6 markdown-content">
+                    <div className="flex-1 p-6 markdown-content overflow-y-auto custom-scrollbar">
                       <BlockRenderer blocks={blocks} />
                     </div>
                   </div>
