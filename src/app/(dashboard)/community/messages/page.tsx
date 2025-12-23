@@ -297,8 +297,7 @@ function MessagesPageContent() {
 
       // Refresh group members and info
       await fetchGroupChat(selectedConversation.id, true);
-      // Remove from study buddies list (they're now in the group)
-      setStudyBuddies(prev => prev.filter(buddy => buddy.user.userID !== userId));
+      // Note: We keep the buddy in the list, they'll now show as "In Group"
     } catch (error) {
       console.error('Error adding member:', error);
       alert(error instanceof Error ? error.message : 'Failed to add member');
@@ -840,54 +839,68 @@ function MessagesPageContent() {
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            {studyBuddies
-                              .filter(buddy => {
-                                // Filter out buddies who are already members
-                                return !groupMembers.some(member => member.userId === buddy.user.userID);
-                              })
-                              .map((buddy) => {
+                            {studyBuddies.map((buddy) => {
                                 const isAdding = addingMembers.includes(buddy.user.userID);
+                                const isAlreadyMember = groupMembers.some(member => member.userId === buddy.user.userID);
                                 return (
                                   <div
                                     key={buddy.connectionId}
-                                    className="flex items-center justify-between p-3 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors"
+                                    className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                                      isAlreadyMember 
+                                        ? 'bg-slate-800/50 border border-emerald-500/30' 
+                                        : 'bg-slate-800 hover:bg-slate-700'
+                                    }`}
                                   >
                                     <div className="flex items-center space-x-3">
                                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold">
                                         {buddy.user.username.charAt(0).toUpperCase()}
                                       </div>
                                       <div>
-                                        <p className="font-semibold text-white">
-                                          {buddy.user.username}
-                                        </p>
+                                        <div className="flex items-center space-x-2">
+                                          <p className="font-semibold text-white">
+                                            {buddy.user.username}
+                                          </p>
+                                          {isAlreadyMember && (
+                                            <span className="text-xs px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full">
+                                              Member
+                                            </span>
+                                          )}
+                                        </div>
                                         <p className="text-xs text-slate-400">
                                           Level {buddy.user.level} • {buddy.user.xp.toLocaleString()} XP
                                         </p>
                                       </div>
                                     </div>
-                                    <button
-                                      onClick={() => handleAddMember(buddy.user.userID)}
-                                      disabled={isAdding}
-                                      className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2 text-sm"
-                                    >
-                                      {isAdding ? (
-                                        <>
-                                          <Loader2 className="w-4 h-4 animate-spin" />
-                                          <span>Adding...</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <UserPlus className="w-4 h-4" />
-                                          <span>Add</span>
-                                        </>
-                                      )}
-                                    </button>
+                                    {isAlreadyMember ? (
+                                      <div className="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 rounded-lg flex items-center space-x-2 text-sm">
+                                        <Users className="w-4 h-4" />
+                                        <span>In Group</span>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleAddMember(buddy.user.userID)}
+                                        disabled={isAdding}
+                                        className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2 text-sm"
+                                      >
+                                        {isAdding ? (
+                                          <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            <span>Adding...</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <UserPlus className="w-4 h-4" />
+                                            <span>Add</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    )}
                                   </div>
                                 );
                               })}
-                            {studyBuddies.filter(buddy => 
-                              !groupMembers.some(member => member.userId === buddy.user.userID)
-                            ).length === 0 && (
+                            {studyBuddies.length > 0 && studyBuddies.every(buddy => 
+                              groupMembers.some(member => member.userId === buddy.user.userID)
+                            ) && (
                               <div className="text-center py-8">
                                 <p className="text-slate-400">All your study buddies are already in this group</p>
                               </div>
