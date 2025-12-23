@@ -37,26 +37,27 @@ export default function CreatorDashboardPage() {
   }, []);
 
   // 關閉下拉選單當點擊外部
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (openMenuId) {
-        const target = event.target as Node;
-        const buttonElement = menuRefs.current[openMenuId];
-        const menuElement = document.getElementById(`menu-${openMenuId}`);
-        
-        if (buttonElement && !buttonElement.contains(target) && 
-            menuElement && !menuElement.contains(target)) {
-          setOpenMenuId(null);
-          setMenuPosition(null);
-        }
-      }
-    };
-
-    if (openMenuId) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [openMenuId]);
+  // handleClickOutside 已移除，根據用戶要求
+  // useEffect(() => {
+  //   const handleClickOutside = (event: MouseEvent) => {
+  //     if (openMenuId) {
+  //       const target = event.target as Node;
+  //       const buttonElement = menuRefs.current[openMenuId];
+  //       const menuElement = document.getElementById(`menu-${openMenuId}`);
+  //       
+  //       if (buttonElement && !buttonElement.contains(target) && 
+  //           menuElement && !menuElement.contains(target)) {
+  //         setOpenMenuId(null);
+  //         setMenuPosition(null);
+  //       }
+  //     }
+  //   };
+  //
+  //   if (openMenuId) {
+  //     document.addEventListener('mousedown', handleClickOutside);
+  //   }
+  //   return () => document.removeEventListener('mousedown', handleClickOutside);
+  // }, [openMenuId]);
 
   const fetchCourses = async () => {
     try {
@@ -457,7 +458,7 @@ export default function CreatorDashboardPage() {
                       value={tagInput}
                       onChange={handleTagInputChange}
                       onKeyDown={handleTagInputKeyDown}
-                      placeholder="輸入標籤名稱，按空格鍵或 Enter 創建標籤 (例如: JavaScript React)"
+                      placeholder="Enter tag name (e.g., JavaScript React)"
                       className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
                       disabled={creating}
                     />
@@ -483,7 +484,7 @@ export default function CreatorDashboardPage() {
                     )}
                     {availableTags.length > 0 && (
                       <div className="mt-2">
-                        <p className="text-xs text-slate-400 mb-1">建議標籤（點擊添加）:</p>
+                        <p className="text-xs text-slate-400 mb-1">Recommended Tags:</p>
                         <div className="flex flex-wrap gap-2">
                           {availableTags
                             .filter(tag => !selectedTags.includes(tag.Name))
