@@ -7,7 +7,6 @@ import { StartButton } from '@/components/landing/StartButton';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
-import { useSession } from 'next-auth/react';
 
 // Import from courses page
 import { Globe, Code, Cpu, Database } from 'lucide-react';
@@ -198,7 +197,6 @@ const BranchingLines = () => {
 export default function LandingPage() {
   const pathname = usePathname();
   const router = useRouter();
-  const { status } = useSession();
   const exploreRef = useRef<HTMLElement>(null);
   const [hasEnteredExplore, setHasEnteredExplore] = useState(false);
   const [allCourses, setAllCourses] = useState<Course[]>([]);
@@ -215,7 +213,6 @@ export default function LandingPage() {
   const [shouldScrollToExplore, setShouldScrollToExplore] = useState(false);
   const [joiningGroupId, setJoiningGroupId] = useState<number | null>(null);
   const fetchedRef = useRef(false);
-  const recommendedUsersFetchedRef = useRef(false);
   const groupsFetchedRef = useRef(false);
 
   // Custom smooth scroll function with slower speed
@@ -358,15 +355,8 @@ export default function LandingPage() {
 
   // Fetch recommended users function - with smart caching
   const fetchRecommendedUsers = useCallback(async (forceRefresh = false) => {
-    // 未登入時不抓取推薦用戶
-    if (status !== 'authenticated') {
-      setRecommendedUsers([]);
-      setUsersLoading(false);
-      return;
-    }
-
     // Skip if already fetched and not forcing refresh
-    if (recommendedUsersFetchedRef.current && !forceRefresh) {
+    if (fetchedRef.current && !forceRefresh) {
       return;
     }
 
@@ -384,24 +374,16 @@ export default function LandingPage() {
       if (response.ok) {
         const data = await response.json();
         setRecommendedUsers(data.matches?.slice(0, 4) || []);
-        recommendedUsersFetchedRef.current = true;
       }
     } catch (err) {
       console.error('Failed to fetch recommended users:', err);
     } finally {
       setUsersLoading(false);
     }
-  }, [status]);
+  }, []);
 
   // Fetch recommended study groups function - with smart caching
   const fetchRecommendedGroups = useCallback(async (forceRefresh = false) => {
-    // 未登入時不抓取推薦社群
-    if (status !== 'authenticated') {
-      setRecommendedGroups([]);
-      setGroupsLoading(false);
-      return;
-    }
-
     // Skip if already fetched and not forcing refresh
     if (groupsFetchedRef.current && !forceRefresh) {
       return;
@@ -436,7 +418,7 @@ export default function LandingPage() {
     } finally {
       setGroupsLoading(false);
     }
-  }, [status]);
+  }, []);
 
   // Handle joining a study group
   const handleJoinGroup = useCallback(async (groupId: number) => {
