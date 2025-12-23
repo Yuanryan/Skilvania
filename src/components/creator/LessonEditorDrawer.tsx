@@ -432,7 +432,12 @@ export function LessonEditorDrawer({
                         viewMode === 'split' ? 'w-1/2' : 'w-full'
                       }`}>
                          <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-                           <BlockEditor blocks={blocks} onChange={setBlocks} />
+                           <BlockEditor 
+                             blocks={blocks} 
+                             onChange={setBlocks} 
+                             courseId={courseId}
+                             nodeId={nodeId}
+                           />
                          </div>
                       </div>
                     )}

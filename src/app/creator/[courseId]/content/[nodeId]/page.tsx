@@ -11,8 +11,9 @@ import BlockRenderer from '@/lib/content/blockRenderer';
 
 export default function ContentEditorPage() {
   const params = useParams();
-  const courseId = params.courseId as string;
-  const nodeId = params.nodeId as string;
+  // 確保 courseId 和 nodeId 是字符串
+  const courseId = Array.isArray(params.courseId) ? params.courseId[0] : params.courseId;
+  const nodeId = Array.isArray(params.nodeId) ? params.nodeId[0] : params.nodeId;
   
   const [blocks, setBlocks] = useState<ContentBlock[]>([]);
   const [nodeTitle, setNodeTitle] = useState('Loading...');
@@ -266,7 +267,12 @@ export default function ContentEditorPage() {
                       </h3>
                     </div>
                     <div className="flex-1 p-6">
-                      <BlockEditor blocks={blocks} onChange={setBlocks} />
+                      <BlockEditor 
+                        blocks={blocks} 
+                        onChange={setBlocks} 
+                        courseId={courseId || undefined} 
+                        nodeId={nodeId || undefined} 
+                      />
                     </div>
                   </div>
                 )}
