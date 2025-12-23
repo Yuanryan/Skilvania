@@ -4,8 +4,6 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import { MessageCircle, Loader2, AlertCircle, Send, ArrowLeft, UserPlus, X, Users, LogOut } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import { useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
-import { createClient } from '@/lib/supabase/client';
 
 interface Conversation {
   type: 'dm' | 'group';
@@ -47,7 +45,6 @@ function MessagesPageContent() {
   const searchParams = useSearchParams();
   const initialUserId = searchParams.get('userId');
   const initialGroupId = searchParams.get('groupId');
-  const { data: session } = useSession();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<{ type: 'dm' | 'group'; id: number } | null>(
@@ -68,7 +65,6 @@ function MessagesPageContent() {
   const [isLoadingBuddies, setIsLoadingBuddies] = useState(false);
   const [addingMembers, setAddingMembers] = useState<number[]>([]);
   const [isLeavingGroup, setIsLeavingGroup] = useState(false);
-  const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -80,29 +76,6 @@ function MessagesPageContent() {
     const interval = setInterval(fetchConversations, 5000);
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    const fetchCurrentUsername = async () => {
-      if (session?.user?.email) {
-        try {
-          const supabase = createClient();
-          const { data: userData } = await supabase
-            .from('USER')
-            .select('Username')
-            .eq('Email', session.user.email)
-            .single();
-
-          if (userData) {
-            setCurrentUsername(userData.Username);
-          }
-        } catch (error) {
-          console.error('Error fetching current username:', error);
-        }
-      }
-    };
-
-    fetchCurrentUsername();
-  }, [session?.user?.email]);
 
   useEffect(() => {
     if (selectedConversation) {
@@ -523,13 +496,8 @@ function MessagesPageContent() {
                       {chatData.messages.map((msg) => (
                         <div
                           key={msg.messageId}
-                          className={`flex items-end gap-2 ${msg.isFromMe ? 'justify-end' : 'justify-start'}`}
+                          className={`flex ${msg.isFromMe ? 'justify-end' : 'justify-start'}`}
                         >
-                          {!msg.isFromMe && chatData.otherUser && (
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                              {chatData.otherUser.username.charAt(0).toUpperCase()}
-                            </div>
-                          )}
                           <div
                             className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
                               msg.isFromMe
@@ -542,11 +510,6 @@ function MessagesPageContent() {
                               {formatTime(msg.createdAt)}
                             </span>
                           </div>
-                          {msg.isFromMe && currentUsername && (
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                              {currentUsername.charAt(0).toUpperCase()}
-                            </div>
-                          )}
                         </div>
                       ))}
                       <div ref={messagesEndRef} />
@@ -620,7 +583,7 @@ function MessagesPageContent() {
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      {groupInfo.isMember && (
+                      {groupInfo.userRole === 'admin' && (
                         <button
                           onClick={openAddMembersModal}
                           className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors flex items-center space-x-2 text-sm"
@@ -629,25 +592,23 @@ function MessagesPageContent() {
                           <span className="hidden sm:inline">Add Members</span>
                         </button>
                       )}
-                      {groupInfo.isMember && (
-                        <button
-                          onClick={handleLeaveGroup}
-                          disabled={isLeavingGroup}
-                          className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2 text-sm"
-                        >
-                          {isLeavingGroup ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              <span className="hidden sm:inline">Leaving...</span>
-                            </>
-                          ) : (
-                            <>
-                              <LogOut className="w-4 h-4" />
-                              <span className="hidden sm:inline">Leave Group</span>
-                            </>
-                          )}
-                        </button>
-                      )}
+                      <button
+                        onClick={handleLeaveGroup}
+                        disabled={isLeavingGroup}
+                        className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2 text-sm"
+                      >
+                        {isLeavingGroup ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span className="hidden sm:inline">Leaving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <LogOut className="w-4 h-4" />
+                            <span className="hidden sm:inline">Leave Group</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -678,13 +639,8 @@ function MessagesPageContent() {
                       {groupMessages.map((msg: any) => (
                         <div
                           key={msg.messageId}
-                          className={`flex items-end gap-2 ${msg.isFromMe ? 'justify-end' : 'justify-start'}`}
+                          className={`flex ${msg.isFromMe ? 'justify-end' : 'justify-start'}`}
                         >
-                          {!msg.isFromMe && msg.senderUsername && (
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                              {msg.senderUsername.charAt(0).toUpperCase()}
-                            </div>
-                          )}
                           <div
                             className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
                               msg.isFromMe
@@ -702,11 +658,6 @@ function MessagesPageContent() {
                               {formatTime(msg.createdAt)}
                             </span>
                           </div>
-                          {msg.isFromMe && currentUsername && (
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                              {currentUsername.charAt(0).toUpperCase()}
-                            </div>
-                          )}
                         </div>
                       ))}
                       <div ref={messagesEndRef} />

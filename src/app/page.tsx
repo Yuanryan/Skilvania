@@ -682,6 +682,20 @@ export default function LandingPage() {
             </h1>
           </div>
 
+          {/* Search Bar Section - Moved to top and made sticky when searching */}
+          <section className={`mb-12 ${isSearching ? "sticky top-24 z-50 bg-deep-forest pb-4 -mx-6 px-6" : ""}`}>
+            <div className="relative">
+              <Search className="absolute left-4 top-4 text-slate-500" size={24} />
+              <input 
+                type="text" 
+                placeholder="Search for courses, skills, or topics..." 
+                value={searchQuery}
+                onChange={handleSearchChange}
+                className="w-full bg-slate-900 border border-slate-700 rounded-2xl py-4 pl-14 pr-6 text-white text-lg focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+              />
+            </div>
+          </section>
+
           {error ? (
             <div className="flex items-center justify-center py-20">
               <div className="flex flex-col items-center gap-4 text-white bg-slate-900/50 p-8 rounded-2xl border border-red-500/20">
@@ -691,69 +705,7 @@ export default function LandingPage() {
               </div>
             </div>
           ) : (
-            <div className="space-y-16">
-              {/* Trending Courses Section */}
-              {loading ? (
-                <section>
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-orange-900/20 rounded-lg border border-orange-500/20">
-                        <TrendingUp className="text-orange-400" size={24} />
-                      </div>
-                      <div>
-                        <h2 className="text-2xl font-bold text-white">Trending Now</h2>
-                        <p className="text-slate-400 text-sm">Loading...</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {[1, 2, 3].map((i) => (
-                      <CourseCardSkeleton key={i} />
-                    ))}
-                  </div>
-                </section>
-              ) : !isSearching && trendingCourses.length > 0 && (
-                <section>
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-orange-900/20 rounded-lg border border-orange-500/20">
-                        <TrendingUp className="text-orange-400" size={24} />
-                      </div>
-                      <div>
-                        <h2 className="text-2xl font-bold text-white">Trending Now</h2>
-                        <p className="text-slate-400 text-sm">Popular courses updated recently ({trendingCourses.length})</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {trendingCourses.map(course => (
-                      <CourseCard key={course.id} course={course} />
-                    ))}
-                  </div>
-                </section>
-              )}
-              
-              {/* Debug: Show if no trending courses */}
-              {!isSearching && trendingCourses.length === 0 && !loading && (
-                <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4 text-yellow-300 text-sm">
-                  Debug: No trending courses found. Total courses: {allCourses.length}
-                </div>
-              )}
-
-              {/* Search Bar Section */}
-              <section>
-                <div className="relative">
-                  <Search className="absolute left-4 top-4 text-slate-500" size={24} />
-                  <input 
-                    type="text" 
-                    placeholder="Search for courses, skills, or topics..." 
-                    value={searchQuery}
-                    onChange={handleSearchChange}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-2xl py-4 pl-14 pr-6 text-white text-lg focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                  />
-                </div>
-              </section>
-
+            <div className={isSearching ? "min-h-[600px]" : "space-y-16"}>
               {/* Search Results */}
               {isSearching && (
                 <section>
@@ -772,49 +724,103 @@ export default function LandingPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-12 bg-slate-900/30 rounded-2xl border border-slate-700">
-                      <p className="text-slate-400 text-lg">No courses found matching your search.</p>
+                    <div className="py-12 bg-slate-900/30 rounded-2xl border border-slate-700">
+                      <p className="text-slate-400 text-lg text-center">No courses found matching your search.</p>
                     </div>
                   )}
                 </section>
               )}
 
-              {/* Courses by Tags */}
-              {loading ? (
-                <section data-section="categories">
-                  <CategorySectionSkeleton />
-                </section>
-              ) : !isSearching && Object.keys(coursesByTag).length > 0 && (
-                <section data-section="categories">
-                  <div className="space-y-12">
-                    {Object.entries(coursesByTag)
-                      .sort(([, coursesA], [, coursesB]) => coursesB.length - coursesA.length)
-                      .slice(0, 5)
-                      .map(([tag, courses]) => (
-                        <div key={tag}>
-                          <div className="mb-4">
-                            <h3 className="text-xl font-bold text-white capitalize">
-                              {tag}
-                              <span className="ml-2 text-sm font-normal text-slate-400">
-                                ({courses.length} {courses.length === 1 ? 'course' : 'courses'})
-                              </span>
-                            </h3>
+              {/* Trending Courses Section */}
+              {!isSearching && (
+                <div className="space-y-16">
+                  {loading ? (
+                    <section>
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-orange-900/20 rounded-lg border border-orange-500/20">
+                            <TrendingUp className="text-orange-400" size={24} />
                           </div>
-                          <div className="relative">
-                            <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
-                              <div className="flex gap-6 min-w-max">
-                                {courses.map(course => (
-                                  <div key={course.id} className="flex-shrink-0 w-80">
-                                    <CourseCard course={course} />
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
+                          <div>
+                            <h2 className="text-2xl font-bold text-white">Trending Now</h2>
+                            <p className="text-slate-400 text-sm">Loading...</p>
                           </div>
                         </div>
-                      ))}
-                  </div>
-                </section>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {[1, 2, 3].map((i) => (
+                          <CourseCardSkeleton key={i} />
+                        ))}
+                      </div>
+                    </section>
+                  ) : trendingCourses.length > 0 && (
+                    <section>
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-orange-900/20 rounded-lg border border-orange-500/20">
+                            <TrendingUp className="text-orange-400" size={24} />
+                          </div>
+                          <div>
+                            <h2 className="text-2xl font-bold text-white">Trending Now</h2>
+                            <p className="text-slate-400 text-sm">Popular courses updated recently ({trendingCourses.length})</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {trendingCourses.map(course => (
+                          <CourseCard key={course.id} course={course} />
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                  
+                  {/* Debug: Show if no trending courses */}
+                  {trendingCourses.length === 0 && !loading && (
+                    <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4 text-yellow-300 text-sm">
+                      Debug: No trending courses found. Total courses: {allCourses.length}
+                    </div>
+                  )}
+
+                  {/* Courses by Tags */}
+                  {loading ? (
+                    <section data-section="categories">
+                      <CategorySectionSkeleton />
+                    </section>
+                  ) : Object.keys(coursesByTag).length > 0 && (
+                    <section data-section="categories">
+                      <div className="space-y-12">
+                        {Object.entries(coursesByTag)
+                          .sort(([, coursesA], [, coursesB]) => coursesB.length - coursesA.length)
+                          .slice(0, 5)
+                          .map(([tag, courses]) => (
+                            <div key={tag}>
+                              <div className="mb-4">
+                                <h3 className="text-xl font-bold text-white capitalize">
+                                  {tag}
+                                  <span className="ml-2 text-sm font-normal text-slate-400">
+                                    ({courses.length} {courses.length === 1 ? 'course' : 'courses'})
+                                  </span>
+                                </h3>
+                              </div>
+                              <div className="relative">
+                                {/* Right fade gradient */}
+                                <div className="absolute right-0 top-0 bottom-4 w-24 bg-gradient-to-l from-slate-950 via-slate-950/80 to-transparent pointer-events-none z-10" />
+                                <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
+                                  <div className="flex gap-6 min-w-max">
+                                    {courses.map(course => (
+                                      <div key={course.id} className="flex-shrink-0 w-80">
+                                        <CourseCard course={course} />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </section>
+                  )}
+                </div>
               )}
 
               {/* Empty State */}
