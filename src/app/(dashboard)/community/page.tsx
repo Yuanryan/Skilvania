@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Users, Loader2, AlertCircle, UserCheck, Search, Globe, Trash2, User as UserIcon, Edit2, Save, X as XIcon, Plus, MessageSquare, UserPlus, Lock, Bell, Check, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Users, Loader2, AlertCircle, UserCheck, Search, Globe, Trash2, User as UserIcon, Edit2, Save, X as XIcon, Plus, MessageSquare, UserPlus, Lock, Bell, Check, X, Upload, Camera } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -14,6 +14,7 @@ interface UserProfile {
   email: string;
   level: number;
   xp: number;
+  avatarUrl: string | null;
   bio: string | null;
   interests: string[];
 }
@@ -83,7 +84,7 @@ interface StudyGroup {
 }
 
 export default function CommunityPage() {
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'buddies' | 'groups' | 'requests'>('buddies');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -102,6 +103,9 @@ export default function CommunityPage() {
   const [editedBio, setEditedBio] = useState('');
   const [editedInterests, setEditedInterests] = useState<string[]>([]);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   
   // Study Groups states
   const [publicGroups, setPublicGroups] = useState<StudyGroup[]>([]);
@@ -115,33 +119,18 @@ export default function CommunityPage() {
   const [processingRequest, setProcessingRequest] = useState<number | null>(null);
 
   useEffect(() => {
-    if (status === 'loading') return;
-
-    if (status !== 'authenticated') {
-      setIsLoadingProfile(false);
-      setIsLoadingConnections(false);
-      setIsLoadingMatches(false);
-      setIsLoadingGroups(false);
-      setError('請先登入以使用社群功能');
-      return;
-    }
-
     fetchProfile();
     fetchConnections();
     fetchMatches();
-  }, [status]);
+  }, []);
 
   useEffect(() => {
-    if (status !== 'authenticated') return;
-
     if (activeTab === 'groups') {
       fetchGroups();
     }
-  }, [activeTab, status]);
+  }, [activeTab]);
 
   const fetchProfile = async () => {
-    if (status !== 'authenticated') return;
-
     try {
       setIsLoadingProfile(true);
       setError(null);
@@ -162,8 +151,6 @@ export default function CommunityPage() {
   };
 
   const fetchConnections = async () => {
-    if (status !== 'authenticated') return;
-
     try {
       setIsLoadingConnections(true);
       setError(null);
@@ -203,8 +190,6 @@ export default function CommunityPage() {
   };
 
   const fetchMatches = async () => {
-    if (status !== 'authenticated') return;
-
     try {
       setIsLoadingMatches(true);
       const response = await fetch('/api/community/match');
@@ -421,8 +406,6 @@ export default function CommunityPage() {
   };
 
   const fetchGroups = async () => {
-    if (status !== 'authenticated') return;
-
     try {
       setIsLoadingGroups(true);
       setError(null);
@@ -514,6 +497,7 @@ export default function CommunityPage() {
       setEditedBio(userProfile.bio || '');
       setEditedInterests(userProfile.interests || []);
       setIsEditingProfile(true);
+      setAvatarError(null);
     }
   };
 
@@ -521,6 +505,95 @@ export default function CommunityPage() {
     setIsEditingProfile(false);
     setEditedBio('');
     setEditedInterests([]);
+    setAvatarError(null);
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setAvatarError('Invalid file type. Only JPG, PNG, and WebP are allowed.');
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setAvatarError('File too large. Maximum size is 2MB.');
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    setAvatarError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const response = await fetch('/api/profile/avatar', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        const errorMsg = data.details 
+          ? `${data.error}: ${data.details}` 
+          : data.error || 'Failed to upload avatar';
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to upload avatar');
+      }
+      
+      // Update local state
+      setUserProfile(prev => prev ? { ...prev, avatarUrl: data.avatarUrl } : null);
+      
+      // Refresh profile data
+      await fetchProfile();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to upload avatar';
+      setAvatarError(errorMessage);
+      console.error('Avatar upload error:', err);
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!confirm('Are you sure you want to remove your avatar?')) return;
+
+    setIsUploadingAvatar(true);
+    setAvatarError(null);
+
+    try {
+      const response = await fetch('/api/profile/avatar', {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to remove avatar');
+      }
+
+      // Update local state
+      setUserProfile(prev => prev ? { ...prev, avatarUrl: null } : null);
+      
+      // Refresh profile data
+      await fetchProfile();
+    } catch (err) {
+      setAvatarError(err instanceof Error ? err.message : 'Failed to remove avatar');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
   };
 
   const saveProfile = async () => {
@@ -751,11 +824,54 @@ export default function CommunityPage() {
             <div className="flex items-start justify-between mb-6">
               <div className="flex items-start space-x-6 flex-1">
                 {/* Avatar */}
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-3xl flex-shrink-0">
-                  {session?.user?.image ? (
-                    <img src={session.user.image} alt="Avatar" className="w-full h-full rounded-full object-cover" />
-                  ) : (
-                    userProfile.username.charAt(0).toUpperCase()
+                <div className="relative flex-shrink-0">
+                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-3xl overflow-hidden">
+                    {userProfile.avatarUrl ? (
+                      <img src={userProfile.avatarUrl} alt="Avatar" className="w-full h-full rounded-full object-cover" />
+                    ) : session?.user?.image ? (
+                      <img src={session.user.image} alt="Avatar" className="w-full h-full rounded-full object-cover" />
+                    ) : (
+                      userProfile.username.charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  {isEditingProfile && (
+                    <>
+                      <input
+                        ref={avatarInputRef}
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                        onChange={handleAvatarUpload}
+                        className="hidden"
+                        id="avatar-upload-community"
+                        disabled={isUploadingAvatar}
+                      />
+                      <label
+                        htmlFor="avatar-upload-community"
+                        className="absolute bottom-0 right-0 w-8 h-8 bg-emerald-600 hover:bg-emerald-500 rounded-full flex items-center justify-center cursor-pointer border-2 border-slate-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Upload avatar"
+                      >
+                        {isUploadingAvatar ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-white" />
+                        ) : (
+                          <Camera className="w-4 h-4 text-white" />
+                        )}
+                      </label>
+                      {userProfile.avatarUrl && (
+                        <button
+                          onClick={handleRemoveAvatar}
+                          disabled={isUploadingAvatar}
+                          className="absolute top-0 right-0 w-6 h-6 bg-red-600 hover:bg-red-500 rounded-full flex items-center justify-center cursor-pointer border-2 border-slate-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Remove avatar"
+                        >
+                          <X className="w-3 h-3 text-white" />
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {avatarError && (
+                    <p className="absolute -bottom-6 left-0 right-0 text-xs text-red-400 text-center whitespace-nowrap">
+                      {avatarError}
+                    </p>
                   )}
                 </div>
 
@@ -1015,7 +1131,7 @@ export default function CommunityPage() {
                 </p>
               </div>
             ) : (
-                  <div className="max-h-[calc(100vh-400px)] overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="max-h-[calc(100vh-400px)] overflow-y-auto pr-2">
                     {recommendedBuddies.map((match, index) => 
                       renderRecommendedBuddy(match, index === recommendedBuddies.length - 1)
                     )}
@@ -1053,7 +1169,7 @@ export default function CommunityPage() {
                         </p>
                       </div>
                     ) : (
-                      <div className="space-y-3 max-h-[calc(100vh-400px)] overflow-y-auto pr-2 custom-scrollbar">
+                      <div className="space-y-3 max-h-[calc(100vh-400px)] overflow-y-auto pr-2">
                         {publicGroups.map((group) => (
                           <div
                             key={group.groupId}
@@ -1156,7 +1272,7 @@ export default function CommunityPage() {
                         </button>
                       </div>
                     ) : (
-                      <div className="space-y-3 max-h-[calc(100vh-400px)] overflow-y-auto pr-2 custom-scrollbar">
+                      <div className="space-y-3 max-h-[calc(100vh-400px)] overflow-y-auto pr-2">
                         {privateGroups.map((group) => (
                           <div
                             key={group.groupId}

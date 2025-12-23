@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     // 獲取用戶基本信息
     const { data: userData, error: userError } = await supabase
       .from('USER')
-      .select('UserID, Username, Email, Level, XP')
+      .select('UserID, Username, Email, Level, XP, AvatarURL')
       .eq('UserID', userId)
       .single();
 
@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
           email: userData.Email,
           level: userData.Level,
           xp: userData.XP,
+          avatarUrl: userData.AvatarURL || null,
           bio: null,
           interests: [],
           lookingForBuddy: true,
@@ -74,6 +75,7 @@ export async function GET(request: NextRequest) {
         email: userData.Email,
         level: userData.Level,
         xp: userData.XP,
+        avatarUrl: userData.AvatarURL || null,
         bio: profile.Bio,
         interests: profile.Interests || [],
         lookingForBuddy: profile.LookingForBuddy,
