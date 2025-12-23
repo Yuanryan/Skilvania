@@ -1,229 +1,107 @@
-# Skilvania - 興趣技能樹 (Interest Skill Tree)
+# [114-1] Web Programming Final Project
 
-A modern Next.js application for learning and skill development with Supabase authentication.
+**(Group Skilvania) Skilvania - 冒險式技能學習與知識交換平台**
 
-**👉 Live Application:** [https://skilvania.vercel.app/](https://skilvania.vercel.app/)
+Demo 影片：(待補)
 
-**資料庫備份檔**:backup.dump
+系統上線（Deploy）：[https://skilvania.vercel.app/](https://skilvania.vercel.app/)
 
-## Tech Stack
+---
 
-- **Framework**: Next.js 16 with React 19
-- **Database**: Supabase (PostgreSQL) + MongoDB (User Activity Logging)
-- **Authentication**: Supabase Auth (Email/Password + Google OAuth)
-- **Styling**: Tailwind CSS
-- **Language**: TypeScript
+## 一、專案簡介
 
-## Getting Started
+Skilvania 是一個結合「知識共生」概念的互動式學習平台。我們將枯燥的課程列表轉化為一片生機蓬勃的「知識森林」，讓每一位使用者既是探索世界的學習者，也是培育森林的領路人。透過視覺化的「技能樹」系統與智慧媒合機制，使用者可以輕鬆交換彼此的專長、分享獨到的見解，並在共同解鎖節點（Nodes）的過程中建立深度的社群連結。在 Skilvania，學習不再是孤獨的攀爬，而是一場全員參與、互助共享的冒險旅程。
 
-### Prerequisites
+---
 
-- Node.js 20.x or 22.x (Node.js 23+ may have compatibility issues)
-- npm or yarn
-- Supabase account and project
-- MongoDB account (MongoDB Atlas recommended for cloud hosting)
+## 二、系統功能說明
 
-### Installation
+### （一）註冊與登入
+*   支援 Email/Password 註冊與登入。
+*   支援 Google OAuth 快速登入（整合 NextAuth.js v5）。
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd skilvania
-   ```
+### （二）冒險式學習流程（學習者）
+*   **技能森林視覺化**：首頁以動態生長的樹狀結構展示學習路徑，隨著滾動呈現知識的分支。
+*   **節點闖關機制**：課程被拆解為具備不同難度（初、中、高）的「知識節點」，隨著探索進度解鎖內容。
+*   **遊戲化成長指標**：完成學習活動可獲得經驗值（XP），提升個人等級並記錄在冒險日誌中。
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+### （三）全民創作者與知識共享（分享者）
+*   **去中心化分享**：平台鼓勵使用者分享專長，將個人經驗轉化為可被探索的技能樹分支。
+*   **區塊編輯器 (Block Editor)**：提供強大的創作工具，支援 Markdown、程式碼區塊、數學公式 (KaTeX) 與圖片上傳。
+*   **視覺化路徑規劃**：創作者可自由設計非線性的學習地圖，引導他人進入特定領域。
 
-3. **Set up Supabase**
-   - Create a new project at [supabase.com](https://supabase.com)
-   - Go to Settings → API to get your project URL and anon key
+### （四）技能交換與社群互動
+*   **智慧夥伴媒合**：系統根據學習興趣與專長，分析「互補性」並推薦適合的 Study Buddies 進行技能交換。
+*   **讀書會 (Study Groups)**：建立特定主題的討論小組，與同好即時交流心得、共同進步。
+*   **即時互動訊息**：支援發送訊息與解鎖夥伴聯絡方式，建立真實的知識連結。
 
-4. **Set up MongoDB (for user activity logging)**
-   - Create a free account at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
-   - Create a new cluster (free tier is sufficient)
-   - Create a database user and get your connection string
-   - Add your IP address to the network access list
-   - Copy your connection string (format: `mongodb+srv://username:password@cluster.mongodb.net/`)
+### （五）個人化儀表板
+*   展示等級、XP 進度條、當前參與課程與社群活躍動態。
 
-5. **Configure environment variables**
-   - Copy `.env.example` to `.env.local`:
-   ```bash
-   cp .env.example .env.local
-   ```
-   - Or create a new `.env.local` file and add the following:
-   
-   **Required variables:**
-   ```env
-   # Supabase Configuration
-   NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
-   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
-   
-   # NextAuth Configuration (Required)
-   # Generate a secret using: npm run generate-secret
-   # Or use: openssl rand -base64 32
-   NEXTAUTH_SECRET=your-generated-secret-here
-   NEXTAUTH_URL=http://localhost:3000
-   ```
-   
-   **Optional variables:**
-   ```env
-   # Google OAuth (Optional - only if you want Google sign-in)
-   GOOGLE_CLIENT_ID=your-google-client-id-here
-   GOOGLE_CLIENT_SECRET=your-google-client-secret-here
-   
-   # MongoDB Configuration (Optional - for user activity logging)
-   MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/
-   MONGODB_DB_NAME=skilvania
-   ```
-   
-   **重要**: 必須設置 `NEXTAUTH_SECRET`，否則認證功能無法正常工作。可以使用以下命令生成：
-   ```bash
-   # 使用 npm 腳本（推薦，跨平台）
-   npm run generate-secret
-   
-   # 或使用 Node.js
-   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-   
-   # Windows (PowerShell)
-   [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
-   
-   # macOS/Linux
-   openssl rand -base64 32
-   ```
+---
 
-6. **Set up the database schema**
-   - Go to your Supabase project dashboard
-   - Navigate to SQL Editor
-   - Copy the contents of `supabase/schema.sql` and run it
-   - This will create all necessary tables: ROLES, USER, USERROLE, and the auth bridge
+## 三、使用技術與框架
 
-7. **Configure Supabase Authentication**
-   - In Supabase Dashboard → Authentication → Providers
-   - Enable Google OAuth if desired
-   - Add `http://localhost:3000/auth/callback` to redirect URLs
+**前端：**
+*   **Framework**: Next.js 16 (App Router) with React 19
+*   **Styling**: Tailwind CSS 4 & Framer Motion 12（視覺動畫核心）
+*   **Components**: Lucide React, React Markdown, KaTeX
 
-### Running the Application
+**後端與資料庫：**
+*   **Database**: Supabase (PostgreSQL) + MongoDB (User Activity Logging)
+*   **Logic**: Next.js Server Actions & API Routes
 
+**驗證與狀態管理：**
+*   **Authentication**: NextAuth.js v5 (Beta)
+*   **State Management**: Zustand
+*   **Validation**: Zod
+
+---
+
+## 四、地端測試與開發指引
+
+為確保專案能在地端 (localhost) 順利執行，請參考以下步驟進行環境設定：
+
+### 1. 複製專案與安裝依賴
+```bash
+git clone <repository-url>
+cd Skilvania
+npm install
+```
+
+### 2. 環境變數設定
+請於根目錄建立 `.env.local` 檔案，並填入必要資訊。可以參考 `env.example`（或本文件下方的環境變數說明）：
+
+**必要變數：**
+```env
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+
+# NextAuth Configuration
+NEXTAUTH_SECRET=your-generated-secret-here  # 可使用 npm run generate-secret 生成
+NEXTAUTH_URL=http://localhost:3000
+```
+
+**選用變數：**
+```env
+# Google OAuth
+GOOGLE_CLIENT_ID=your-google-client-id-here
+GOOGLE_CLIENT_SECRET=your-google-client-secret-here
+
+```
+
+### 3. 資料庫設定 (Supabase)
+1.  前往 [Supabase](https://supabase.com) 建立專案。
+2.  在 SQL Editor 中執行 `supabase/schema.sql` 以建立核心資料表（USER, COURSE, NODE 等）。
+3.  若需啟用社群功能，可執行 `supabase/community_schema.sql`。
+
+### 4. 啟動開發伺服器
 ```bash
 npm run dev
 ```
+開啟瀏覽器造訪 `http://localhost:3000` 即可進行測試。
 
-Open [http://localhost:3000](http://localhost:3000) with your browser.
+---
 
-### Available Scripts
-
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run start` - Start production server
-- `npm run lint` - Run ESLint
-
-## Database Schema
-
-### Supabase (PostgreSQL)
-
-The application uses a custom database schema designed according to the data dictionary:
-
-- **ROLES**: Role definitions (愛好者, 設計師, 開發者, etc.)
-- **USER**: User profiles with XP and level tracking
-- **USERROLE**: Many-to-many relationship between users and roles
-- **auth_user_bridge**: Links Supabase auth users to custom USER table
-- **COURSE**: Course definitions
-- **NODE**: Learning nodes in skill trees
-- **EDGE**: Connections between nodes
-- **USERPROGRESS**: User learning progress tracking
-
-### MongoDB (User Activity Logging)
-
-MongoDB is used to store user activity logs in a flexible NoSQL format:
-
-- **user_activities**: Collection storing all user activities
-  - Activity types: page_view, node_view, node_complete, course_start, search, login, etc.
-  - Includes metadata for detailed tracking
-  - Supports session tracking and analytics
-
-## Features
-
-- 🔐 **Authentication**: Email/password and Google OAuth
-- 👤 **User Profiles**: XP and level tracking with role assignments
-- 🎯 **Skill Trees**: Hierarchical learning paths (framework in place)
-- 🎨 **Modern UI**: Tailwind CSS with dark theme
-- 📱 **Responsive**: Mobile-friendly design
-- 📊 **Activity Logging**: Comprehensive user activity tracking with MongoDB
-
-## Project Structure
-
-```
-src/
-├── app/                 # Next.js app router
-│   ├── (auth)/         # Authentication routes
-│   ├── profile/        # User profiles
-│   └── api/            # API routes (if needed)
-├── components/         # Reusable components
-├── lib/               # Utilities and configurations
-│   ├── supabase/      # Supabase client setup
-│   └── mongodb/       # MongoDB client and activity logging
-└── types/             # TypeScript type definitions
-
-supabase/
-└── schema.sql        # Database schema
-```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **"npm install" hangs or fails**
-   - Delete `node_modules` and `package-lock.json`
-   - Run `npm install` again
-   - Ensure you're using Node.js 20.x or 22.x
-
-2. **Authentication not working / MissingSecret error**
-   - **必須設置 `NEXTAUTH_SECRET` 環境變數**
-   - 生成 secret 的方法：
-     ```bash
-     # 使用 npm 腳本（推薦）
-     npm run generate-secret
-     
-     # 或使用 Node.js
-     node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-     
-     # Windows PowerShell
-     [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
-     
-     # macOS/Linux
-     openssl rand -base64 32
-     ```
-   - 將生成的 secret 添加到 `.env.local`:
-     ```env
-     NEXTAUTH_SECRET=your-generated-secret-here
-     NEXTAUTH_URL=http://localhost:3000
-     ```
-   - 驗證 `.env.local` 有正確的 Supabase 憑證
-   - 檢查 Supabase dashboard 中的重定向 URL 是否正確
-   - 確保數據庫 schema 已正確應用
-
-3. **Database connection issues**
-   - Confirm Supabase project is active
-   - Check that `supabase/schema.sql` was executed in SQL Editor
-   - Verify RLS policies are correctly applied
-
-4. **MongoDB connection issues**
-   - Verify `MONGODB_URI` in `.env.local` is correct
-   - Check MongoDB Atlas network access list includes your IP
-   - Ensure database user has proper permissions
-   - Activity logging will fail silently if MongoDB is unavailable (won't break the app)
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License.
