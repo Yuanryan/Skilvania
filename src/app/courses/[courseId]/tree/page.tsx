@@ -34,7 +34,7 @@ export default function TreePage() {
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || '獲取數據失敗');
+        throw new Error(errorData.error || 'Failed to fetch data');
       }
 
       const data = await response.json();
@@ -53,8 +53,8 @@ export default function TreePage() {
         }
       }
     } catch (err) {
-      console.error('獲取 tree 數據錯誤:', err);
-      setError(err instanceof Error ? err.message : '未知錯誤');
+      console.error('Error fetching tree data:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
@@ -122,7 +122,7 @@ export default function TreePage() {
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-white">
             <Loader2 size={48} className="animate-spin text-emerald-500" />
-            <p className="text-lg">載入技能樹中...</p>
+            <p className="text-lg">Loading skill tree...</p>
           </div>
         </div>
       </div>
@@ -137,7 +137,7 @@ export default function TreePage() {
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-white bg-slate-900/50 p-8 rounded-2xl border border-red-500/20">
             <AlertCircle size={48} className="text-red-500" />
-            <p className="text-lg font-bold">載入失敗</p>
+            <p className="text-lg font-bold">Loading failed</p>
             <p className="text-slate-400">{error}</p>
           </div>
         </div>

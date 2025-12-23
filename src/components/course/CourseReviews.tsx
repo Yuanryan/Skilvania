@@ -55,7 +55,7 @@ export function CourseReviews({ courseId }: CourseReviewsProps) {
     e.preventDefault();
     
     if (!session) {
-      setError('請先登入以發表評論');
+      setError('Please login to post a review');
       return;
     }
 
@@ -76,7 +76,7 @@ export function CourseReviews({ courseId }: CourseReviewsProps) {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || '提交失敗');
+        throw new Error(data.error || 'Submission failed');
       }
 
       // 重新獲取評分數據
@@ -87,7 +87,7 @@ export function CourseReviews({ courseId }: CourseReviewsProps) {
       setRating(5);
       setShowForm(false);
     } catch (err: any) {
-      setError(err.message || '提交評論時發生錯誤');
+      setError(err.message || 'Error submitting review');
     } finally {
       setSubmitting(false);
     }
@@ -96,7 +96,7 @@ export function CourseReviews({ courseId }: CourseReviewsProps) {
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString('zh-TW', { 
+      return date.toLocaleDateString('en-US', { 
         year: 'numeric', 
         month: 'short', 
         day: 'numeric' 
@@ -130,7 +130,7 @@ export function CourseReviews({ courseId }: CourseReviewsProps) {
   if (loading) {
     return (
       <div className="mt-10 p-6 bg-slate-950/50 rounded-xl border border-white/5">
-        <div className="text-slate-400">載入中...</div>
+        <div className="text-slate-400">Loading...</div>
       </div>
     );
   }
@@ -142,7 +142,7 @@ export function CourseReviews({ courseId }: CourseReviewsProps) {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <Star size={20} className="text-amber-400" fill="currentColor" />
-            課程評分
+            Course Rating
           </h2>
           {ratingsData && (
             <div className="flex items-center gap-2">
@@ -152,7 +152,7 @@ export function CourseReviews({ courseId }: CourseReviewsProps) {
               <div className="flex flex-col">
                 {renderStars(Math.round(ratingsData.averageRating))}
                 <span className="text-xs text-slate-400 mt-1">
-                  {ratingsData.totalRatings} 則評論
+                  {ratingsData.totalRatings} reviews
                 </span>
               </div>
             </div>
@@ -166,7 +166,7 @@ export function CourseReviews({ courseId }: CourseReviewsProps) {
             className="w-full mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
           >
             <MessageSquare size={16} />
-            {showForm ? '取消' : '發表評論'}
+            {showForm ? 'Cancel' : 'Post Review'}
           </button>
         )}
 
@@ -181,21 +181,21 @@ export function CourseReviews({ courseId }: CourseReviewsProps) {
             
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                評分
+                Rating
               </label>
               {renderStars(rating, true, setRating)}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                評論內容（選填）
+                Review Content (optional)
               </label>
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 rows={4}
                 className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="分享你對這個課程的看法..."
+                placeholder="Share your thoughts about this course..."
               />
             </div>
 
@@ -207,12 +207,12 @@ export function CourseReviews({ courseId }: CourseReviewsProps) {
               {submitting ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  提交中...
+                  Submitting...
                 </>
               ) : (
                 <>
                   <Send size={16} />
-                  提交評論
+                  Submit Review
                 </>
               )}
             </button>
@@ -221,14 +221,14 @@ export function CourseReviews({ courseId }: CourseReviewsProps) {
 
         {!session && (
           <p className="mt-4 text-sm text-slate-400">
-            請先登入以發表評論
+            Please login to post a review
           </p>
         )}
       </div>
 
       {/* 評論列表 */}
       <div className="space-y-4">
-        <h3 className="text-lg font-bold text-white">所有評論</h3>
+        <h3 className="text-lg font-bold text-white">All Reviews</h3>
         
         {ratingsData && ratingsData.ratings.length > 0 ? (
           <div className="space-y-4">
@@ -263,8 +263,8 @@ export function CourseReviews({ courseId }: CourseReviewsProps) {
         ) : (
           <div className="bg-slate-950/50 rounded-xl p-8 border border-white/5 text-center">
             <MessageSquare size={32} className="mx-auto text-slate-600 mb-2" />
-            <p className="text-slate-400">尚無評論</p>
-            <p className="text-sm text-slate-500 mt-1">成為第一個評論這個課程的人吧！</p>
+            <p className="text-slate-400">No reviews yet</p>
+            <p className="text-sm text-slate-500 mt-1">Be the first to review this course!</p>
           </div>
         )}
       </div>

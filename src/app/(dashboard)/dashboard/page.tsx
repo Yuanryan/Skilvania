@@ -73,7 +73,7 @@ export default function DashboardPage() {
         <main className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-white">
             <Loader2 size={48} className="animate-spin text-emerald-500" />
-            <p className="text-lg">載入儀表板中...</p>
+            <p className="text-lg">Loading dashboard...</p>
           </div>
         </main>
       </div>
@@ -87,7 +87,7 @@ export default function DashboardPage() {
         <main className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-white bg-slate-900/50 p-8 rounded-2xl border border-red-500/20">
             <AlertCircle size={48} className="text-red-500" />
-            <p className="text-lg font-bold">載入失敗</p>
+            <p className="text-lg font-bold">Loading failed</p>
             <p className="text-slate-400">{error || '無法載入儀表板數據'}</p>
           </div>
         </main>
@@ -182,9 +182,9 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="bg-slate-900/50 border border-white/5 rounded-2xl p-12 text-center mb-12">
-            <p className="text-slate-400 mb-4">還沒有開始任何課程</p>
+            <p className="text-slate-400 mb-4">No courses started yet</p>
             <Link href="/courses" className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold transition-colors">
-              瀏覽課程目錄
+              Browse Course Catalog
             </Link>
           </div>
         )}
