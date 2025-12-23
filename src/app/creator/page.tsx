@@ -101,12 +101,6 @@ export default function CreatorDashboardPage() {
   };
 
   const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // 按空格键创建tag
-    if (e.key === ' ' && tagInput.trim()) {
-      e.preventDefault();
-      handleAddTag(tagInput);
-    }
-    // Enter键仍然可以创建tag（备用方式）
     if (e.key === 'Enter' && tagInput.trim()) {
       e.preventDefault();
       handleAddTag(tagInput);
