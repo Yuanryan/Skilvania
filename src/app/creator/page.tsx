@@ -321,7 +321,7 @@ export default function CreatorDashboardPage() {
                             {formatDate(course.updatedAt)}
                         </div>
                         <div className="col-span-1 flex justify-end">
-                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity relative">
+                            <div className="flex items-center gap-2 relative">
                                 <Link 
                                     href={`/creator/${course.id}/editor`}
                                     className="p-2 bg-slate-800 hover:bg-white text-slate-300 hover:text-slate-900 rounded-lg transition-colors"

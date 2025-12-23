@@ -32,11 +32,13 @@ export async function GET(request: NextRequest) {
           CreatedAt,
           sender:USER!community_messages_SenderID_fkey (
             UserID,
-            Username
+            Username,
+            AvatarURL
           ),
           receiver:USER!community_messages_ReceiverID_fkey (
             UserID,
-            Username
+            Username,
+            AvatarURL
           )
         `)
         .or(`SenderID.eq.${userId},ReceiverID.eq.${userId}`)
@@ -79,6 +81,7 @@ export async function GET(request: NextRequest) {
             type: 'dm',
             id: otherUserId,
             name: msg.SenderID === userId ? receiver?.Username : sender?.Username,
+            avatarUrl: msg.SenderID === userId ? receiver?.AvatarURL : sender?.AvatarURL,
             lastMessage: {
               content: msg.Content,
               createdAt: msg.CreatedAt,
@@ -124,7 +127,8 @@ export async function GET(request: NextRequest) {
             SenderID,
             CreatedAt,
             sender:USER!group_messages_SenderID_fkey (
-              Username
+              Username,
+              AvatarURL
             )
           `)
           .in('GroupID', groupIds)

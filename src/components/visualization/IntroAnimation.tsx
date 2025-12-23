@@ -47,7 +47,7 @@ export function IntroAnimation({ onComplete }: { onComplete: () => void }) {
             animate={
                 stage === 'seed' 
                 ? { y: "50vh", opacity: 1, scale: 1 } 
-                : { y: "40vh", opacity: 0, scale: 2 }
+                : { y: "25vh", opacity: 0, scale: 2 }
             }
             transition={{ duration: 0.8, ease: "easeOut" }}
             className="absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-emerald-400 rounded-full shadow-[0_0_20px_rgba(52,211,153,0.8)]"
@@ -66,7 +66,7 @@ export function IntroAnimation({ onComplete }: { onComplete: () => void }) {
                 </defs>
                 {/* Center trunk */}
                 <motion.path
-                    d="M 50% 100% L 50% 40%"
+                    d="M 50% 100% L 50% 25%"
                     initial={{ pathLength: 0, opacity: 0 }}
                     animate={{ pathLength: 1, opacity: 1 }}
                     transition={{ duration: 0.8, ease: "easeOut" }}
@@ -90,7 +90,7 @@ export function IntroAnimation({ onComplete }: { onComplete: () => void }) {
 
 function Branch({ index, total }: { index: number, total: number }) {
     // Calculate angle and control points for a nice organic spread
-    // Start from center screen (50% 40%)
+    // Start from center screen (50% 25%)
     // Spread to different areas of the screen
     
     // We want to target rough grid areas. 
@@ -102,15 +102,15 @@ function Branch({ index, total }: { index: number, total: number }) {
     const rad = (angle * Math.PI) / 180;
     
     const startX = 50; // percent
-    const startY = 40; // percent
+    const startY = 25; // percent
     
-    // End points randomly distributed in the upper 2/3rds
+    // End points randomly distributed in the upper portion
     const endX = 50 + (Math.cos(rad) * 40) + (Math.random() * 10 - 5);
-    const endY = 40 + (Math.sin(rad) * 40) + (Math.random() * 10 - 5);
+    const endY = 25 + (Math.sin(rad) * 25) + (Math.random() * 10 - 5);
     
     // Quadratic Bezier curve
     const cpX = 50 + (Math.cos(rad) * 20);
-    const cpY = 40 + (Math.sin(rad) * 20);
+    const cpY = 25 + (Math.sin(rad) * 15);
 
     const d = `M ${startX}% ${startY}% Q ${cpX}% ${cpY}% ${endX}% ${endY}%`;
 

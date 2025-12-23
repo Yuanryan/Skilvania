@@ -9,6 +9,7 @@ interface Conversation {
   type: 'dm' | 'group';
   id: number;
   name: string;
+  avatarUrl?: string | null;
   groupType?: 'public' | 'private';
   lastMessage: {
     content: string;
@@ -35,6 +36,7 @@ interface ChatData {
     username: string;
     level: number;
     xp: number;
+    avatarUrl?: string | null;
   } | null;
   hasMore: boolean;
   isConnected: boolean;
@@ -65,31 +67,68 @@ function MessagesPageContent() {
   const [isLoadingBuddies, setIsLoadingBuddies] = useState(false);
   const [addingMembers, setAddingMembers] = useState<number[]>([]);
   const [isLeavingGroup, setIsLeavingGroup] = useState(false);
+  const [isTabVisible, setIsTabVisible] = useState(true);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+  // Handle tab visibility changes
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const isVisible = document.visibilityState === 'visible';
+      setIsTabVisible(isVisible);
+      
+      // Refresh data when tab becomes visible
+      if (isVisible) {
+        fetchConversations();
+        if (selectedConversation) {
+          if (selectedConversation.type === 'dm') {
+            fetchDMChat(selectedConversation.id, true);
+          } else {
+            fetchGroupChat(selectedConversation.id, true);
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [selectedConversation]);
+
   useEffect(() => {
     fetchConversations();
     
-    // Poll for new messages every 5 seconds
-    const interval = setInterval(fetchConversations, 5000);
+    // Poll for new conversations only when tab is visible
+    const interval = setInterval(() => {
+      if (isTabVisible) {
+        fetchConversations();
+      }
+    }, 10000); // Increased to 10 seconds
+    
     return () => clearInterval(interval);
-  }, []);
+  }, [isTabVisible]);
 
   useEffect(() => {
     if (selectedConversation) {
       if (selectedConversation.type === 'dm') {
         fetchDMChat(selectedConversation.id);
-        const interval = setInterval(() => fetchDMChat(selectedConversation.id, true), 3000);
+        const interval = setInterval(() => {
+          if (isTabVisible) {
+            fetchDMChat(selectedConversation.id, true);
+          }
+        }, 5000); // Increased to 5 seconds
         return () => clearInterval(interval);
       } else {
         fetchGroupChat(selectedConversation.id);
-        const interval = setInterval(() => fetchGroupChat(selectedConversation.id, true), 3000);
+        const interval = setInterval(() => {
+          if (isTabVisible) {
+            fetchGroupChat(selectedConversation.id, true);
+          }
+        }, 5000); // Increased to 5 seconds
         return () => clearInterval(interval);
       }
     }
-  }, [selectedConversation]);
+  }, [selectedConversation, isTabVisible]);
 
   useEffect(() => {
     scrollToBottom();
@@ -108,7 +147,15 @@ function MessagesPageContent() {
       }
 
       const data = await response.json();
-      setConversations(data.conversations || []);
+      const newConversations = data.conversations || [];
+      
+      // Only update if conversations have changed
+      setConversations(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(newConversations)) {
+          return prev; // Avoid re-render if nothing changed
+        }
+        return newConversations;
+      });
     } catch (err) {
       console.error('Error fetching conversations:', err);
     } finally {
@@ -128,7 +175,15 @@ function MessagesPageContent() {
       }
 
       const data = await response.json();
-      setChatData(data);
+      
+      // Only update if chat data has changed
+      setChatData(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(data)) {
+          return prev; // Avoid re-render if nothing changed
+        }
+        return data;
+      });
+      
       setGroupMessages([]);
       setGroupInfo(null);
     } catch (err) {
@@ -151,32 +206,49 @@ function MessagesPageContent() {
       }
       const messagesData = await messagesRes.json();
       
-      // Fetch group info
-      const groupRes = await fetch(`/api/community/groups/${groupId}`);
-      if (!groupRes.ok) {
-        throw new Error('Failed to fetch group info');
+      // Only fetch group info and members on initial load (not during silent polling)
+      if (!silent) {
+        // Fetch group info
+        const groupRes = await fetch(`/api/community/groups/${groupId}`);
+        if (!groupRes.ok) {
+          throw new Error('Failed to fetch group info');
+        }
+        const groupData = await groupRes.json();
+        setGroupInfo(groupData.group);
+        
+        // Fetch group members
+        const membersRes = await fetch(`/api/community/groups/${groupId}/members`);
+        if (membersRes.ok) {
+          const membersData = await membersRes.json();
+          setGroupMembers(membersData.members || []);
+        }
       }
-      const groupData = await groupRes.json();
       
-      // Fetch group members
-      const membersRes = await fetch(`/api/community/groups/${groupId}/members`);
-      if (membersRes.ok) {
-        const membersData = await membersRes.json();
-        setGroupMembers(membersData.members || []);
-      }
+      // Only update messages if they've changed
+      const newMessages = messagesData.messages || [];
+      setGroupMessages(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(newMessages)) {
+          return prev; // Avoid re-render if messages haven't changed
+        }
+        return newMessages;
+      });
       
-      setGroupMessages(messagesData.messages || []);
-      setGroupInfo(groupData.group);
       setChatData(null);
       
-      // Mark as read
-      if (messagesData.messages && messagesData.messages.length > 0) {
-        const lastMessage = messagesData.messages[messagesData.messages.length - 1];
-        await fetch(`/api/community/groups/${groupId}/read`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lastReadMessageId: lastMessage.messageId })
-        });
+      // Mark messages as read if there are any messages
+      if (newMessages.length > 0) {
+        const lastMessage = newMessages[newMessages.length - 1];
+        // Always mark as read when viewing the chat
+        try {
+          await fetch(`/api/community/groups/${groupId}/read`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lastReadMessageId: lastMessage.messageId })
+          });
+        } catch (error) {
+          // Silently fail - don't block the chat loading
+          console.error('Failed to mark messages as read:', error);
+        }
       }
     } catch (err) {
       console.error('Error fetching group chat:', err);
@@ -354,7 +426,7 @@ function MessagesPageContent() {
               </h2>
             </div>
 
-            <div className="overflow-hidden h-[calc(100%-73px)]">
+            <div className="overflow-y-auto h-[calc(100%-73px)] custom-scrollbar">
               {isLoadingConversations ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
@@ -379,9 +451,17 @@ function MessagesPageContent() {
                       }`}
                     >
                       <div className="flex items-start space-x-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold flex-shrink-0">
-                          {conv.name.charAt(0).toUpperCase()}
-                        </div>
+                        {conv.avatarUrl ? (
+                          <img
+                            src={conv.avatarUrl}
+                            alt={conv.name}
+                            className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold flex-shrink-0">
+                            {conv.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center space-x-2 min-w-0">
@@ -442,9 +522,17 @@ function MessagesPageContent() {
                     >
                       <ArrowLeft className="w-6 h-6" />
                     </button>
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold">
-                      {chatData.otherUser?.username.charAt(0).toUpperCase()}
-                    </div>
+                    {chatData.otherUser?.avatarUrl ? (
+                      <img
+                        src={chatData.otherUser.avatarUrl}
+                        alt={chatData.otherUser.username}
+                        className="w-10 h-10 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold">
+                        {chatData.otherUser?.username.charAt(0).toUpperCase()}
+                      </div>
+                    )}
                     <div>
                       <h3 className="font-semibold text-white">
                         {chatData.otherUser?.username}
@@ -496,8 +584,21 @@ function MessagesPageContent() {
                       {chatData.messages.map((msg) => (
                         <div
                           key={msg.messageId}
-                          className={`flex ${msg.isFromMe ? 'justify-end' : 'justify-start'}`}
+                          className={`flex ${msg.isFromMe ? 'justify-end' : 'justify-start'} items-end space-x-2`}
                         >
+                          {!msg.isFromMe && (
+                            chatData.otherUser?.avatarUrl ? (
+                              <img
+                                src={chatData.otherUser.avatarUrl}
+                                alt={chatData.otherUser.username}
+                                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                                {chatData.otherUser?.username.charAt(0).toUpperCase()}
+                              </div>
+                            )
+                          )}
                           <div
                             className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
                               msg.isFromMe
@@ -639,8 +740,21 @@ function MessagesPageContent() {
                       {groupMessages.map((msg: any) => (
                         <div
                           key={msg.messageId}
-                          className={`flex ${msg.isFromMe ? 'justify-end' : 'justify-start'}`}
+                          className={`flex ${msg.isFromMe ? 'justify-end' : 'justify-start'} items-end space-x-2`}
                         >
+                          {!msg.isFromMe && (
+                            msg.senderAvatarUrl ? (
+                              <img
+                                src={msg.senderAvatarUrl}
+                                alt={msg.senderUsername}
+                                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                                {msg.senderUsername?.charAt(0).toUpperCase()}
+                              </div>
+                            )
+                          )}
                           <div
                             className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
                               msg.isFromMe

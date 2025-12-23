@@ -342,10 +342,10 @@ export default function CoursePreviewPage() {
 
                     <div className="flex items-center gap-4">
                         <Link 
-                            href={`/courses/${courseId}/tree`} 
+                            href={`/creator/${courseId}/editor`} 
                             className="px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-lg rounded-xl shadow-lg shadow-emerald-900/50 transition-all hover:scale-105 flex items-center gap-2"
                         >
-                            <Play size={20} fill="currentColor" /> Start Learning
+                            <Edit2 size={20} /> Start Editing
                         </Link>
                         <Link
                             href={`/courses/${courseId}/tree`}

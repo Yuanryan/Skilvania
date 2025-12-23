@@ -7,6 +7,7 @@ import { StartButton } from '@/components/landing/StartButton';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
+import { useSession } from 'next-auth/react';
 
 // Import from courses page
 import { Globe, Code, Cpu, Database } from 'lucide-react';
@@ -122,6 +123,60 @@ interface CoursesByTag {
   [tag: string]: Course[];
 }
 
+// Normalize tags to group similar variations together
+// e.g., "cook", "Cook", "cooking" -> "cook"
+const normalizeTag = (tag: string): string => {
+  if (!tag) return tag;
+  
+  // Convert to lowercase and trim
+  let normalized = tag.toLowerCase().trim();
+  
+  // Common exceptions that shouldn't be normalized
+  const exceptions = ['css', 'js', 'apis', 'os', 'ios', 'aws', 'ai', 'ml', 'ui', 'ux', 'api'];
+  if (exceptions.includes(normalized)) {
+    return normalized;
+  }
+  
+  // Remove common suffixes that create variations
+  // Remove -ing suffix (cooking -> cook) but only if word is long enough
+  if (normalized.endsWith('ing') && normalized.length > 5) {
+    const base = normalized.slice(0, -3);
+    // Only remove if base is a valid word (at least 2 chars)
+    if (base.length >= 2) {
+      normalized = base;
+    }
+  }
+  // Remove -ed suffix (cooked -> cook) but only if word is long enough
+  if (normalized.endsWith('ed') && normalized.length > 4) {
+    const base = normalized.slice(0, -2);
+    // Only remove if base is a valid word (at least 2 chars)
+    if (base.length >= 2) {
+      normalized = base;
+    }
+  }
+  // Remove -er suffix (cooker -> cook) but keep if it's a meaningful word
+  if (normalized.endsWith('er') && normalized.length > 4) {
+    // Don't remove -er if it's a common word ending (like "computer", "developer", "designer")
+    const beforeEr = normalized.slice(0, -2);
+    const commonErWords = ['comput', 'develop', 'design', 'engine', 'programm', 'teach', 'learn', 'build', 'creat', 'writ'];
+    if (beforeEr.length >= 2 && !commonErWords.some(prefix => beforeEr.startsWith(prefix))) {
+      normalized = beforeEr;
+    }
+  }
+  // Remove plural -s (cooks -> cook) but keep -s if it's part of the word
+  if (normalized.endsWith('s') && normalized.length > 3) {
+    // Don't remove -s if it's a common word or acronym
+    const beforeS = normalized.slice(0, -1);
+    // Keep -s for words that commonly end in s (like "maths", "physics")
+    const keepSuffix = ['math', 'physic', 'statistic', 'analytic', 'linguistic', 'economic'];
+    if (!keepSuffix.some(prefix => beforeS.startsWith(prefix))) {
+      normalized = beforeS;
+    }
+  }
+  
+  return normalized;
+};
+
 // Branching Animation Component
 const BranchingLines = () => {
   // Sync with seed animation:
@@ -131,7 +186,7 @@ const BranchingLines = () => {
 
   const pathLength = useTransform(scrollY, [1350, 1700], [0, 1]);
   // Branches fade in, then fade out right after appearing
-  const opacity = useTransform(scrollY, [1350, 1400, 1600, 1700], [0, 1, 1, 0]);
+  const opacity = useTransform(scrollY, [1250, 1350, 1550, 1600], [0, 1, 1, 0]);
   
   // Import useTransform for the circle animation
   const circleOpacity = useTransform(scrollY, [1300, 1400], [0, 1]);
@@ -149,9 +204,9 @@ const BranchingLines = () => {
             </feMerge>
           </filter>
         </defs>
-        {/* Main Trunk - positioned slightly left */}
+        {/* Main Trunk - centered */}
         <motion.path
-          d="M43 3 L43 20"
+          d="M50 3 L50 5"
           stroke="#34d399"
           strokeWidth="0.5"
           strokeLinecap="round"
@@ -161,7 +216,7 @@ const BranchingLines = () => {
         />
         {/* Branch Left */}
         <motion.path
-          d="M43 20 C43 35 13 35 13 50"
+          d="M50 0 C50 20 40 20 20 80"
           stroke="#34d399"
           strokeWidth="0.4"
           strokeLinecap="round"
@@ -171,7 +226,7 @@ const BranchingLines = () => {
         />
         {/* Branch Center */}
         <motion.path
-          d="M43 20 L43 50"
+          d="M50 0 L50 20"
           stroke="#34d399"
           strokeWidth="0.4"
           strokeLinecap="round"
@@ -181,7 +236,7 @@ const BranchingLines = () => {
         />
         {/* Branch Right */}
         <motion.path
-          d="M43 20 C43 35 73 35 73 50"
+          d="M50 0 C50 20 80 20 80 80"
           stroke="#34d399"
           strokeWidth="0.4"
           strokeLinecap="round"
@@ -197,11 +252,13 @@ const BranchingLines = () => {
 export default function LandingPage() {
   const pathname = usePathname();
   const router = useRouter();
+  const { data: session } = useSession();
   const exploreRef = useRef<HTMLElement>(null);
   const [hasEnteredExplore, setHasEnteredExplore] = useState(false);
   const [allCourses, setAllCourses] = useState<Course[]>([]);
   const [trendingCourses, setTrendingCourses] = useState<Course[]>([]);
   const [coursesByTag, setCoursesByTag] = useState<CoursesByTag>({});
+  const [tagDisplayNames, setTagDisplayNames] = useState<Record<string, string>>({});
   const [recommendedUsers, setRecommendedUsers] = useState<MatchedUser[]>([]);
   const [recommendedGroups, setRecommendedGroups] = useState<StudyGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -330,19 +387,43 @@ export default function LandingPage() {
       setTrendingCourses(trending);
 
       const grouped: CoursesByTag = {};
+      const displayNames: Record<string, string> = {}; // Map normalized tag -> display name
+      const allOriginalTags: string[] = []; // Collect all original tags for display name selection
+      
+      // First pass: collect all original tags
+      for (const course of courses) {
+        if (course.tags && course.tags.length > 0) {
+          allOriginalTags.push(...course.tags);
+        }
+      }
+      
+      // Second pass: group by normalized tags
       for (const course of courses) {
         if (course.tags && course.tags.length > 0) {
           for (const tag of course.tags) {
-            if (!grouped[tag]) {
-              grouped[tag] = [];
+            const normalized = normalizeTag(tag);
+            
+            // Set display name if not set (use the shortest matching original tag)
+            if (!displayNames[normalized]) {
+              // Find the best display name from all matching original tags
+              const matchingTags = allOriginalTags.filter(t => normalizeTag(t) === normalized);
+              displayNames[normalized] = matchingTags.reduce((shortest, current) => 
+                current.length < shortest.length ? current : shortest
+              ) || tag;
             }
-            if (grouped[tag].length < 6) {
-              grouped[tag].push(course);
+            
+            if (!grouped[normalized]) {
+              grouped[normalized] = [];
+            }
+            if (grouped[normalized].length < 6) {
+              grouped[normalized].push(course);
             }
           }
         }
       }
+      
       setCoursesByTag(grouped);
+      setTagDisplayNames(displayNames);
 
       fetchedRef.current = true;
     } catch (err) {
@@ -587,7 +668,7 @@ export default function LandingPage() {
       <div className="h-full">
         <Link 
           href={`/courses/${course.id}`} 
-          className="group bg-slate-900/50 backdrop-blur border border-white/5 hover:border-emerald-500/30 rounded-2xl p-6 transition-all hover:-translate-y-1 hover:shadow-xl h-full flex flex-col block"
+          className="group bg-gray-900/50 backdrop-blur border border-white/5 hover:border-emerald-500/30 rounded-2xl p-6 transition-all hover:-translate-y-1 hover:shadow-xl h-full flex flex-col block"
         >
           <h3 className="text-lg font-bold text-white mb-2 group-hover:text-emerald-400 transition-colors line-clamp-1">
             {course.title}
@@ -656,12 +737,6 @@ export default function LandingPage() {
             
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <StartButton onStartClick={handleStartClick} />
-              <Link 
-                href="/creator" 
-                className="px-8 py-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-lg transition-all border border-slate-700 hover:border-slate-600"
-              >
-                Create a Course
-              </Link>
             </div>
           </div>
         </section>
@@ -792,11 +867,13 @@ export default function LandingPage() {
                         {Object.entries(coursesByTag)
                           .sort(([, coursesA], [, coursesB]) => coursesB.length - coursesA.length)
                           .slice(0, 5)
-                          .map(([tag, courses]) => (
-                            <div key={tag}>
+                          .map(([normalizedTag, courses]) => {
+                            const displayName = tagDisplayNames[normalizedTag] || normalizedTag;
+                            return (
+                            <div key={normalizedTag}>
                               <div className="mb-4">
                                 <h3 className="text-xl font-bold text-white capitalize">
-                                  {tag}
+                                  {displayName}
                                   <span className="ml-2 text-sm font-normal text-slate-400">
                                     ({courses.length} {courses.length === 1 ? 'course' : 'courses'})
                                   </span>
@@ -816,7 +893,8 @@ export default function LandingPage() {
                                 </div>
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                       </div>
                     </section>
                   )}
@@ -838,7 +916,7 @@ export default function LandingPage() {
 
         {/* Right Sidebar - Connect with Learners */}
         <AnimatePresence>
-          {hasEnteredExplore && !isSearching && (recommendedUsers.length > 0 || recommendedGroups.length > 0 || groupsLoading || usersLoading) && (
+          {hasEnteredExplore && !isSearching && (
             <motion.aside 
               initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
@@ -862,14 +940,54 @@ export default function LandingPage() {
                 </div>
                 
                 <div className="max-h-[calc(100vh-250px)] overflow-y-auto pr-2 custom-scrollbar space-y-6">
+                  {/* Show placeholder when not logged in */}
+                  {!session?.user && (
+                    <div className="py-8 text-center space-y-4">
+                      <div className="space-y-3">
+                        {/* Skeleton placeholders */}
+                        <div className="bg-slate-800/50 rounded-lg p-4 border border-white/5">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 rounded-full bg-slate-700/50 animate-pulse"></div>
+                            <div className="flex-1 space-y-2">
+                              <div className="h-4 bg-slate-700/50 rounded w-24 animate-pulse"></div>
+                              <div className="h-3 bg-slate-700/30 rounded w-32 animate-pulse"></div>
+                            </div>
+                          </div>
+                          <div className="h-3 bg-slate-700/30 rounded w-full mb-2 animate-pulse"></div>
+                          <div className="h-3 bg-slate-700/30 rounded w-3/4 animate-pulse"></div>
+                        </div>
+                        <div className="bg-slate-800/50 rounded-lg p-4 border border-white/5">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 rounded-full bg-slate-700/50 animate-pulse"></div>
+                            <div className="flex-1 space-y-2">
+                              <div className="h-4 bg-slate-700/50 rounded w-28 animate-pulse"></div>
+                              <div className="h-3 bg-slate-700/30 rounded w-36 animate-pulse"></div>
+                            </div>
+                          </div>
+                          <div className="h-3 bg-slate-700/30 rounded w-full mb-2 animate-pulse"></div>
+                          <div className="h-3 bg-slate-700/30 rounded w-2/3 animate-pulse"></div>
+                        </div>
+                      </div>
+                      <div className="pt-4 border-t border-white/10">
+                        <p className="text-slate-400 text-sm mb-3">Log in to see</p>
+                        <Link
+                          href="/login"
+                          className="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm px-6 py-2 rounded-lg transition-colors"
+                        >
+                          Login
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                  
                   {/* Users Section - Study Buddies on top */}
-                  {usersLoading && recommendedUsers.length === 0 && (
+                  {session?.user && usersLoading && recommendedUsers.length === 0 && (
                     <div className="py-4 text-center">
                       <Loader2 className="w-4 h-4 animate-spin text-slate-400 mx-auto mb-2" />
                       <p className="text-xs text-slate-400">Loading study buddies...</p>
                     </div>
                   )}
-                  {recommendedUsers.length > 0 && (
+                  {session?.user && recommendedUsers.length > 0 && (
                     <div>
                       <h3 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">Study Buddies</h3>
                       {recommendedUsers.slice(0, 3).map((user, index) => (
@@ -949,13 +1067,13 @@ export default function LandingPage() {
                   )}
 
                   {/* Study Groups Section - Below Study Buddies */}
-                  {groupsLoading && recommendedGroups.length === 0 && (
+                  {session?.user && groupsLoading && recommendedGroups.length === 0 && (
                     <div className="py-4 text-center">
                       <Loader2 className="w-4 h-4 animate-spin text-slate-400 mx-auto mb-2" />
                       <p className="text-xs text-slate-400">Loading study groups...</p>
                     </div>
                   )}
-                  {recommendedGroups.length > 0 && (
+                  {session?.user && recommendedGroups.length > 0 && (
                     <div>
                       {recommendedUsers.length > 0 && (
                         <div className="border-t border-white/10 mb-4 mt-4"></div>

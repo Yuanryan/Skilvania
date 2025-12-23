@@ -22,12 +22,19 @@ export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      // Return empty matches for unauthenticated users instead of error
+      return NextResponse.json({ 
+        matches: [],
+        message: 'Login to find study buddies!'
+      }, { status: 200 });
     }
 
     const userId = await getUserIdFromSession(session.user.id);
     if (userId === null) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return NextResponse.json({ 
+        matches: [],
+        message: 'User not found'
+      }, { status: 200 });
     }
 
     const supabase = createAdminClient();

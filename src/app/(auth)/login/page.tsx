@@ -31,7 +31,17 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError(result.error);
+        switch (result.error) {
+          case "InvalidCredentials":
+          case "CredentialsSignin":
+            setError("Invalid email or password");
+            break;
+          case "GoogleSignInRequired":
+            setError("This account uses Google sign-in. Please use Google to sign in.");
+            break;
+          default:
+            setError(result.error);
+        }
       } else {
         window.location.href = "/dashboard";
       }

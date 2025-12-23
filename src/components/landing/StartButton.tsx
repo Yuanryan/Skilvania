@@ -42,8 +42,8 @@ export function StartButton({ onStartClick }: StartButtonProps) {
   // The button stays in place (y=0) until scroll reaches 700px, then moves down
   // Phase 2a (700-850px): Falls 150px while page is still fixed
   // Phase 2b (850-1400px): Continues falling into explore section as page scrolls
-  // Total fall: 150px + 550px = 700px to reach explore section
-  const y = useTransform(scrollY, [700, 1400], [0, 650]);
+  // Total fall: 150px + 200px = 350px to reach explore section (200px higher)
+  const y = useTransform(scrollY, [700, 1400], [0, 350]);
   
   // Phase 3 (1200-1400px): Seed fades away as it reaches the tree root
   const seedOpacity = useTransform(scrollY, [1200, 1400], [1, 0]);

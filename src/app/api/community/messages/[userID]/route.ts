@@ -78,7 +78,7 @@ export async function GET(
     // Get other user info
     const { data: otherUser } = await supabase
       .from('USER')
-      .select('UserID, Username, Level, XP')
+      .select('UserID, Username, Level, XP, AvatarURL')
       .eq('UserID', otherUserId)
       .single();
 
@@ -121,7 +121,8 @@ export async function GET(
         userID: otherUser.UserID,
         username: otherUser.Username,
         level: otherUser.Level || 1,
-        xp: otherUser.XP || 0
+        xp: otherUser.XP || 0,
+        avatarUrl: otherUser.AvatarURL || null
       } : null,
       hasMore: messages?.length === limit,
       isConnected,

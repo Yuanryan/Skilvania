@@ -169,9 +169,9 @@ export function Navbar() {
                     className="text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-colors relative"
                 >
                     <Users size={16} /> Community
-                    {(pendingConnections + unreadGroupMessages) > 0 && (
+                    {pendingConnections > 0 && (
                       <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                        {pendingConnections + unreadGroupMessages > 9 ? '9+' : pendingConnections + unreadGroupMessages}
+                        {pendingConnections > 9 ? '9+' : pendingConnections}
                       </span>
                     )}
                 </Link>
@@ -180,9 +180,9 @@ export function Navbar() {
                     className="text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-colors relative"
                 >
                     <MessageCircle size={16} /> Messages
-                    {unreadMessages > 0 && (
+                    {(unreadMessages + unreadGroupMessages) > 0 && (
                       <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                        {unreadMessages > 9 ? '9+' : unreadMessages}
+                        {(unreadMessages + unreadGroupMessages) > 9 ? '9+' : (unreadMessages + unreadGroupMessages)}
                       </span>
                     )}
                 </Link>
@@ -227,6 +227,9 @@ export function Navbar() {
             </>
         ) : (
             <div className="flex items-center gap-4">
+                <span className="text-slate-500 text-xs font-medium">
+                    Login to see all features
+                </span>
                 <Link 
                     href="/login" 
                     className="text-slate-300 hover:text-white font-bold text-sm transition-colors"

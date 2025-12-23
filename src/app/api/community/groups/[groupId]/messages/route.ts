@@ -58,7 +58,8 @@ export async function GET(
         sender:SenderID (
           UserID,
           Username,
-          Level
+          Level,
+          AvatarURL
         )
       `)
       .eq('GroupID', groupIdNum)
@@ -99,6 +100,7 @@ export async function GET(
       senderId: msg.SenderID,
       senderUsername: msg.sender?.Username,
       senderLevel: msg.sender?.Level,
+      senderAvatarUrl: msg.sender?.AvatarURL || null,
       content: msg.Content,
       createdAt: msg.CreatedAt,
       isFromMe: msg.SenderID === userId,

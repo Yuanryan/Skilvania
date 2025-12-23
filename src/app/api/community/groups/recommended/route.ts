@@ -8,12 +8,17 @@ export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      // Return empty groups for unauthenticated users instead of error
+      return NextResponse.json({ 
+        recommendedGroups: []
+      }, { status: 200 });
     }
 
     const userId = await getUserIdFromSession(session.user.id);
     if (userId === null) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return NextResponse.json({ 
+        recommendedGroups: []
+      }, { status: 200 });
     }
 
     const supabase = createAdminClient();

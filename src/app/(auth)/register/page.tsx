@@ -47,7 +47,20 @@ export default function RegisterPage() {
       });
 
       if (result?.error) {
-        setError(result.error);
+        switch (result.error) {
+          case "UserExists":
+            setError("User with this email already exists");
+            break;
+          case "UsernameTaken":
+            setError("Username is already taken");
+            break;
+          case "InvalidCredentials":
+          case "CredentialsSignin":
+            setError("Registration failed. Please check your details.");
+            break;
+          default:
+            setError(result.error);
+        }
       } else {
         window.location.href = "/dashboard";
       }

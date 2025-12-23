@@ -17,6 +17,14 @@ function ErrorContent() {
         return "You do not have permission to sign in.";
       case "Verification":
         return "The verification token has expired or has already been used.";
+      case "OAuthAccountNotLinked":
+        return "To confirm your identity, sign in with the same account you used originally.";
+      case "OAuthSignin":
+        return "Error in constructing an authorization URL.";
+      case "OAuthCallback":
+        return "Error in handling the response from an OAuth provider.";
+      case "CredentialsSignin":
+        return "Sign in failed. Check the details you provided.";
       default:
         return "An error occurred during authentication.";
     }

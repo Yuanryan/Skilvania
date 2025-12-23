@@ -1,9 +1,14 @@
-import NextAuth from "next-auth"
+import NextAuth, { CredentialsSignin } from "next-auth"
 import Google from "next-auth/providers/google"
 import Credentials from "next-auth/providers/credentials"
 import { createClient } from "@/lib/supabase/server"
 import bcrypt from "bcryptjs"
 import { logActivity } from "@/lib/mongodb/activity"
+
+class InvalidCredentials extends CredentialsSignin { code = "InvalidCredentials" }
+class UserExists extends CredentialsSignin { code = "UserExists" }
+class UsernameTaken extends CredentialsSignin { code = "UsernameTaken" }
+class GoogleSignInRequired extends CredentialsSignin { code = "GoogleSignInRequired" }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
@@ -58,7 +63,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             .single();
 
           if (existingUser) {
-            throw new Error("User with this email already exists");
+            throw new UserExists();
           }
 
           // Check if username is taken
@@ -69,7 +74,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             .single();
 
           if (existingUsername) {
-            throw new Error("Username is already taken");
+            throw new UsernameTaken();
           }
 
           // Hash password and create user
@@ -110,16 +115,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             .single();
 
           if (error || !user) {
-            throw new Error("Invalid email or password");
+            throw new InvalidCredentials();
           }
 
           if (!user.Password) {
-            throw new Error("This account uses Google sign-in. Please use Google to sign in.");
+            throw new GoogleSignInRequired();
           }
 
           const isValid = await bcrypt.compare(password, user.Password);
           if (!isValid) {
-            throw new Error("Invalid email or password");
+            throw new InvalidCredentials();
           }
 
           // 自動記錄登入活動
