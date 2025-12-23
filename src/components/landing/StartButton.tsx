@@ -32,7 +32,7 @@ export function StartButton({ onStartClick }: StartButtonProps) {
   // Phase 2 (700-850px): Move the seed down (y movement only starts after fully round)
   const width = useTransform(scrollY, [0, 700], [buttonWidth || 220, 64]);
   const height = useTransform(scrollY, [0, 700], [buttonHeight || 64, 64]);
-  const borderRadius = useTransform(scrollY, [0, 700], ["0.75rem", "50%"]);
+  const borderRadius = useTransform(scrollY, [0, 700], [12, 32]);
   
   // Content fades out quickly during transformation phase
   const contentOpacity = useTransform(scrollY, [0, 300], [1, 0]);
@@ -87,18 +87,18 @@ export function StartButton({ onStartClick }: StartButtonProps) {
       <motion.button
         ref={buttonRef}
         onClick={handleClick}
-        style={buttonWidth ? {
-          width,
-          height,
+        style={{
+          width: buttonWidth ? width : 'auto',
+          height: buttonHeight ? height : 'auto',
           borderRadius,
           y,
           scale,
           opacity: seedOpacity,
           boxShadow,
           backgroundColor,
-          position: 'relative', // Ensure transforms work
-        } : undefined}
-        className="px-8 py-4 text-white font-bold text-lg rounded-xl flex items-center justify-center gap-2 overflow-hidden"
+          position: 'relative',
+        }}
+        className="px-8 py-4 text-white font-bold text-lg flex items-center justify-center gap-2 overflow-hidden"
       >
         <motion.span
           style={{ opacity: contentOpacity, scale: contentScale }}
