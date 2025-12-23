@@ -2,33 +2,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { X, GripVertical, Image as ImageIcon, Video, Type, Plus, Trash2, Bold, Italic, Heading1, Heading2, Heading3, List, Link2, Code, Quote, Minus, Loader2, CheckCircle2 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-import rehypeRaw from 'rehype-raw';
 import imageCompression from 'browser-image-compression';
 import { ContentBlock } from '@/types/content';
-import BlockRenderer from '@/lib/content/blockRenderer';
-import ImageBlockComponent from '@/components/content/ImageBlock';
-import VideoBlockComponent from '@/components/content/VideoBlock';
 import 'highlight.js/styles/github-dark.css';
-
-/**
- * 檢測是否為影片 URL
- */
-function isVideoUrl(url: string): boolean {
-  const videoPatterns = [
-    /youtube\.com\/watch/,
-    /youtu\.be\//,
-    /youtube\.com\/embed/,
-    /vimeo\.com/,
-    /\.mp4$/i,
-    /\.webm$/i,
-    /\.mov$/i,
-    /\.avi$/i,
-  ];
-  return videoPatterns.some(pattern => pattern.test(url));
-}
 
 interface BlockEditorProps {
   blocks: ContentBlock[];
@@ -38,8 +14,6 @@ interface BlockEditorProps {
 }
 
 export default function BlockEditor({ blocks, onChange, courseId, nodeId }: BlockEditorProps) {
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-
   // 確保只有一個 block，如果沒有或有多個，則只保留第一個或創建一個
   const currentBlock = blocks.length > 0 ? blocks[0] : { type: 'markdown' as const, content: '' };
   
@@ -56,80 +30,13 @@ export default function BlockEditor({ blocks, onChange, courseId, nodeId }: Bloc
 
 
   return (
-    <div>
-      {editingIndex === 0 ? (
-        <MarkdownBlockEditor
-          block={currentBlock}
-          onUpdate={(content) => updateBlock({ ...currentBlock, content })}
-          onBlur={() => setEditingIndex(null)}
-          courseId={courseId}
-          nodeId={nodeId}
-        />
-      ) : (
-        <div
-          onClick={() => setEditingIndex(0)}
-          className="cursor-text p-3 rounded border border-transparent hover:border-slate-700 min-h-[100px]"
-        >
-          <div className="prose prose-invert prose-sm max-w-none">
-            {currentBlock.content ? (
-              <ReactMarkdown 
-                remarkPlugins={[remarkGfm]} 
-                rehypePlugins={[rehypeHighlight, rehypeRaw]}
-                components={{
-                  // 自定義段落渲染，避免 p 標籤內部嵌套 div
-                  p: ({ node, ...props }) => {
-                    return <div className="mb-4" {...props} />;
-                  },
-                  // 自定義圖片渲染，使用 ImageBlock 組件
-                  img: ({ node, ...props }) => {
-                    const { src, alt } = props as { src?: string; alt?: string };
-                    if (!src) return null;
-                    
-                    // 從 alt 文字中提取 caption（如果格式為 "alt|caption"）
-                    const [imageAlt, caption] = (alt || '').split('|');
-                    
-                    return (
-                      <ImageBlockComponent 
-                        url={src} 
-                        alt={imageAlt || undefined} 
-                        caption={caption || undefined} 
-                      />
-                    );
-                  },
-                  // 自定義連結渲染，檢測影片 URL
-                  a: ({ node, ...props }) => {
-                    const { href, children } = props as { href?: string; children?: React.ReactNode };
-                    if (!href) return <a {...props} />;
-                    
-                    // 如果是影片 URL，使用 VideoBlock 渲染
-                    if (isVideoUrl(href)) {
-                      const title = typeof children === 'string' ? children : undefined;
-                      return <VideoBlockComponent url={href} title={title} />;
-                    }
-                    
-                    // 否則使用普通連結
-                    return (
-                      <a 
-                        href={href} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-emerald-400 hover:text-emerald-300 underline"
-                        {...props}
-                      >
-                        {children}
-                      </a>
-                    );
-                  },
-                }}
-              >
-                {currentBlock.content}
-              </ReactMarkdown>
-            ) : (
-              <p className="text-slate-500 italic">點擊編輯 Markdown 內容...</p>
-            )}
-          </div>
-        </div>
-      )}
+    <div className="h-full">
+      <MarkdownBlockEditor
+        block={currentBlock}
+        onUpdate={(content) => updateBlock({ ...currentBlock, content })}
+        courseId={courseId}
+        nodeId={nodeId}
+      />
     </div>
   );
 }
@@ -139,30 +46,18 @@ export default function BlockEditor({ blocks, onChange, courseId, nodeId }: Bloc
 function MarkdownBlockEditor({ 
   block, 
   onUpdate, 
-  onBlur,
   courseId,
   nodeId
 }: { 
   block: { type: 'markdown'; content: string }; 
   onUpdate: (content: string) => void;
-  onBlur: () => void;
   courseId?: string;
   nodeId?: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const blurTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isToolbarClickRef = useRef(false);
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [showVideoDialog, setShowVideoDialog] = useState(false);
-
-  // 自動調整 textarea 高度
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = 'auto';
-      textarea.style.height = `${textarea.scrollHeight}px`;
-    }
-  }, [block.content]);
 
   const insertMarkdown = (before: string, after: string = '', placeholder: string = '') => {
     const textarea = textareaRef.current;
@@ -348,10 +243,10 @@ function MarkdownBlockEditor({
   };
 
   return (
-    <div>
+    <div className="flex flex-col h-full border border-slate-700 rounded-lg overflow-hidden bg-slate-950">
       {/* Toolbar */}
       <div 
-        className="toolbar-container flex items-center gap-1 p-2 bg-slate-800/50 border-b border-slate-700 rounded-t-lg flex-wrap"
+        className="toolbar-container flex items-center gap-1 p-2 bg-slate-800/50 border-b border-slate-700 flex-wrap"
         onMouseDown={(e) => {
           // 防止點擊工具欄時 textarea 失去焦點
           e.preventDefault();
@@ -547,36 +442,9 @@ function MarkdownBlockEditor({
         ref={textareaRef}
         value={block.content}
         onChange={(e) => onUpdate(e.target.value)}
-        onBlur={(e) => {
-          // 清除之前的 timeout
-          if (blurTimeoutRef.current) {
-            clearTimeout(blurTimeoutRef.current);
-          }
-          
-          // 延遲執行 onBlur，檢查是否是因為工具欄點擊或對話框打開
-          blurTimeoutRef.current = setTimeout(() => {
-            // 如果焦點還在 textarea 或工具欄上，或對話框正在顯示，不觸發 onBlur
-            const activeElement = document.activeElement;
-            if (activeElement === textareaRef.current || 
-                activeElement?.closest('.toolbar-container') ||
-                activeElement?.closest('.fixed') || // 對話框是 fixed 定位
-                isToolbarClickRef.current ||
-                showImageDialog ||
-                showVideoDialog) {
-              return;
-            }
-            onBlur();
-          }, 150);
-        }}
-        className="w-full bg-slate-950 text-slate-200 font-mono text-sm p-3 rounded-b-lg border border-slate-700 border-t-0 focus:outline-none focus:border-emerald-500 resize-none"
+        className="flex-1 w-full bg-transparent text-slate-200 font-mono text-sm p-3 focus:outline-none resize-none custom-scrollbar"
         placeholder="輸入 Markdown 內容..."
         autoFocus
-        style={{ minHeight: '200px', height: 'auto' }}
-        onInput={(e) => {
-          const target = e.target as HTMLTextAreaElement;
-          target.style.height = 'auto';
-          target.style.height = `${target.scrollHeight}px`;
-        }}
       />
     </div>
   );
@@ -1053,7 +921,7 @@ function MarkdownImageDialog({
                     <CheckCircle2 size={12} /> 已上傳
                   </div>
                   {/* 文件預覽 */}
-                  <div className="relative bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
+                  <div className="relative bg-slate-800 rounded-lg overflow-auto custom-scrollbar border border-slate-700 max-h-64">
                     {(() => {
                       const lowerUrl = url.toLowerCase();
                       const isPdf = lowerUrl.includes('.pdf');
