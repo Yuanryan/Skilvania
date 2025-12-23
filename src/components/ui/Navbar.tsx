@@ -11,6 +11,7 @@ import { logUserActivity } from "@/lib/utils/activityLogger";
 export function Navbar() {
   const { data: session, status } = useSession();
   const [username, setUsername] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadGroupMessages, setUnreadGroupMessages] = useState(0);
@@ -36,12 +37,13 @@ export function Navbar() {
           const supabase = createClient();
           const { data: userData } = await supabase
             .from('USER')
-            .select('Username')
+            .select('Username, AvatarURL')
             .eq('Email', session.user.email)
             .single();
 
           if (userData) {
             setUsername(userData.Username);
+            setAvatarUrl(userData.AvatarURL || null);
           }
         } catch (error) {
           console.error("Error fetching username:", error);
@@ -186,9 +188,10 @@ export function Navbar() {
                 </Link>
                 <Link 
                     href="/creator" 
-                    className="text-slate-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-colors"
+                    className="text-emerald-400 hover:text-emerald-300 text-sm font-bold flex items-center gap-2 transition-all relative px-3 py-1.5 rounded-lg bg-emerald-500/10 shadow-[0_0_8px_rgba(16,185,129,0.5)] hover:shadow-[0_0_16px_rgba(16,185,129,0.7)] border border-emerald-500/30"
                 >
-                    <PlusCircle size={16} /> Create
+                    <PlusCircle size={16} className="drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]" /> 
+                    <span className="drop-shadow-[0_0_6px_rgba(16,185,129,0.6)]">Create</span>
                 </Link>
                 {(isAdmin || isAdminRef.current) && (
                     <Link 
@@ -202,10 +205,12 @@ export function Navbar() {
                 <div className="flex items-center gap-3 pl-4 border-l border-white/10">
                     <Link 
                       href="/community" 
-                      className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-500 hover:border-emerald-500 transition-colors" 
+                      className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-500 hover:border-emerald-500 transition-colors overflow-hidden" 
                       title="My Profile"
                     >
-                        {(session?.user || lastSessionRef.current?.user)?.image ? (
+                        {avatarUrl ? (
+                            <img src={avatarUrl} alt="Avatar" className="w-full h-full rounded-full object-cover" />
+                        ) : (session?.user || lastSessionRef.current?.user)?.image ? (
                             <img src={(session?.user || lastSessionRef.current?.user)?.image} alt="Avatar" className="w-full h-full rounded-full object-cover" />
                         ) : (
                             <UserIcon size={16} />
