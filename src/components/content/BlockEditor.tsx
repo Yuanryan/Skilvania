@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, GripVertical, Image as ImageIcon, Video, Type, Plus, Trash2, Bold, Italic, Heading1, Heading2, Heading3, List, Link2, Code, Quote, Minus } from 'lucide-react';
+import { X, GripVertical, Image as ImageIcon, Video, Type, Plus, Trash2, Bold, Italic, Heading1, Heading2, Heading3, List, Link2, Code, Quote, Minus, Loader2, CheckCircle2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
+import imageCompression from 'browser-image-compression';
 import { ContentBlock } from '@/types/content';
 import BlockRenderer from '@/lib/content/blockRenderer';
 import ImageBlockComponent from '@/components/content/ImageBlock';
@@ -32,9 +33,11 @@ function isVideoUrl(url: string): boolean {
 interface BlockEditorProps {
   blocks: ContentBlock[];
   onChange: (blocks: ContentBlock[]) => void;
+  courseId?: string;
+  nodeId?: string;
 }
 
-export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
+export default function BlockEditor({ blocks, onChange, courseId, nodeId }: BlockEditorProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   // 確保只有一個 block，如果沒有或有多個，則只保留第一個或創建一個
@@ -59,6 +62,8 @@ export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
           block={currentBlock}
           onUpdate={(content) => updateBlock({ ...currentBlock, content })}
           onBlur={() => setEditingIndex(null)}
+          courseId={courseId}
+          nodeId={nodeId}
         />
       ) : (
         <div
@@ -134,11 +139,15 @@ export default function BlockEditor({ blocks, onChange }: BlockEditorProps) {
 function MarkdownBlockEditor({ 
   block, 
   onUpdate, 
-  onBlur 
+  onBlur,
+  courseId,
+  nodeId
 }: { 
   block: { type: 'markdown'; content: string }; 
   onUpdate: (content: string) => void;
   onBlur: () => void;
+  courseId?: string;
+  nodeId?: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const blurTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -488,6 +497,8 @@ function MarkdownBlockEditor({
       {/* Image Dialog */}
       {showImageDialog && (
         <MarkdownImageDialog
+          courseId={courseId || undefined}
+          nodeId={nodeId || undefined}
           onClose={() => {
             setShowImageDialog(false);
             // 對話框關閉後，重置標記並恢復焦點
@@ -574,18 +585,408 @@ function MarkdownBlockEditor({
 // Markdown Image Dialog
 function MarkdownImageDialog({ 
   onClose, 
-  onSubmit 
+  onSubmit,
+  courseId,
+  nodeId
 }: { 
   onClose: () => void; 
   onSubmit: (url: string, alt?: string, caption?: string) => void;
+  courseId?: string;
+  nodeId?: string;
 }) {
   const [url, setUrl] = useState('');
   const [alt, setAlt] = useState('');
   const [caption, setCaption] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadMode, setUploadMode] = useState<'url' | 'upload'>('upload');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 當對話框關閉時重置狀態
+  const handleClose = () => {
+    setUrl('');
+    setAlt('');
+    setCaption('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    onClose();
+  };
+
+  // 調試：檢查 courseId 和 nodeId 是否正確傳遞
+  useEffect(() => {
+    if (!courseId || !nodeId) {
+      console.warn('MarkdownImageDialog: Missing courseId or nodeId', { courseId, nodeId });
+    }
+  }, [courseId, nodeId]);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('handleFileSelect 被調用');
+    const file = e.target.files?.[0];
+    if (!file) {
+      console.log('沒有選擇文件');
+      return;
+    }
+
+    console.log('選擇的文件:', {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    });
+
+    // 清除舊的 URL 和 alt，準備上傳新文件
+    setUrl('');
+    setAlt('');
+
+    // 驗證文件類型（支援多種圖片格式和 PDF）
+    const allowedTypes = [
+      'image/jpeg', 
+      'image/jpg', 
+      'image/png', 
+      'image/gif', 
+      'image/webp',
+      'image/heic',
+      'image/heif',
+      'application/pdf'
+    ];
+    
+    // 也檢查文件擴展名（因為某些瀏覽器可能無法正確識別 HEIC 的 MIME type）
+    const fileExt = file.name.split('.').pop()?.toLowerCase();
+    const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'pdf'];
+    
+    if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExt || '')) {
+      alert('不支援的檔案類型。支援的格式：JPEG、PNG、GIF、WebP、HEIC、HEIF、PDF');
+      return;
+    }
+
+    // 檢查 courseId 和 nodeId
+    if (!courseId || !nodeId) {
+      console.error('Missing courseId or nodeId:', { courseId, nodeId });
+      alert('無法上傳：缺少課程或節點資訊。請確認您正在編輯課程內容頁面。');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      console.log('開始處理文件上傳');
+      
+      // 檢查是否為 HEIC/HEIF 文件
+      const isHeic = file.type.includes('heic') || 
+                     file.type.includes('heif') ||
+                     fileExt === 'heic' || 
+                     fileExt === 'heif';
+      
+      console.log('文件類型檢查:', {
+        isHeic,
+        fileType: file.type,
+        fileExt,
+        startsWithImage: file.type.startsWith('image/')
+      });
+      
+      let fileToUpload = file;
+      let fileName = file.name;
+      
+      // HEIC 文件將在後端轉換，前端直接上傳
+      // 不需要在前端進行轉換
+      
+      // 只對非 HEIC 的圖片進行壓縮（PDF 和 HEIC 不壓縮）
+      const isImage = fileToUpload.type.startsWith('image/') && 
+                     !isHeic &&
+                     fileExt !== 'pdf';
+      
+      console.log('是否需要壓縮:', {
+        isImage,
+        isHeic,
+        fileExt
+      });
+      
+      if (isImage) {
+        // 根據原始文件大小動態調整壓縮參數（平衡品質和大小）
+        const originalSizeMB = file.size / 1024 / 1024;
+        
+        // 如果原始文件已經很小（< 0.8MB），不壓縮
+        if (originalSizeMB < 0.8) {
+          console.log('原始文件已小於 0.8MB，跳過壓縮');
+          fileToUpload = file;
+        } else {
+          // 動態設置壓縮參數（更注重品質）
+          let maxSizeMB = 0.8;
+          let maxDimension = 1920;
+          let quality = 0.85;
+          
+          // 如果文件很大，使用適度壓縮
+          if (originalSizeMB > 3) {
+            maxSizeMB = 0.6;
+            maxDimension = 1600;
+            quality = 0.8;
+          } else if (originalSizeMB > 2) {
+            maxSizeMB = 0.7;
+            maxDimension = 1800;
+            quality = 0.82;
+          } else if (originalSizeMB > 1) {
+            maxSizeMB = 0.75;
+            maxDimension = 1920;
+            quality = 0.85;
+          }
+          
+          // 壓縮圖片選項
+          const options = {
+            maxSizeMB, // 壓縮後最大大小
+            maxWidthOrHeight: maxDimension, // 最大寬度或高度
+            useWebWorker: true, // 使用 Web Worker 進行壓縮（不阻塞 UI）
+            fileType: file.type, // 保持原始文件類型
+            initialQuality: quality, // 初始品質（提高品質）
+            alwaysKeepResolution: false, // 允許降低解析度
+          };
+
+          // 壓縮圖片
+          let compressedFile = await imageCompression(file, options);
+          
+          // 只有在壓縮後仍然明顯超過目標大小時才進行二次壓縮
+          if (compressedFile.size > maxSizeMB * 1024 * 1024 * 1.5) {
+            console.log('第一次壓縮後仍明顯超過目標大小，進行二次壓縮...');
+            const secondPassOptions = {
+              maxSizeMB: maxSizeMB * 0.9,
+              maxWidthOrHeight: maxDimension * 0.95,
+              useWebWorker: true,
+              fileType: file.type,
+              initialQuality: quality * 0.95,
+              alwaysKeepResolution: false,
+            };
+            compressedFile = await imageCompression(compressedFile, secondPassOptions);
+          }
+          
+          // 顯示壓縮結果
+          const originalSize = (file.size / 1024 / 1024).toFixed(2);
+          const compressedSize = (compressedFile.size / 1024 / 1024).toFixed(2);
+          const compressionRatio = ((1 - compressedFile.size / file.size) * 100).toFixed(1);
+          console.log(`圖片壓縮：${originalSize}MB → ${compressedSize}MB (減少 ${compressionRatio}%)`);
+          
+          fileToUpload = compressedFile;
+        }
+      } else {
+        // PDF 不壓縮，直接使用原文件
+        console.log(`上傳 ${fileExt?.toUpperCase()} 檔案（不壓縮）`);
+      }
+      
+      // 驗證文件大小（5MB）
+      if (fileToUpload.size > 5 * 1024 * 1024) {
+        alert('檔案太大。最大大小為 5MB。');
+        setUploading(false);
+        return;
+      }
+
+      // 上傳文件
+      console.log('準備上傳文件:', {
+        fileName,
+        fileSize: fileToUpload.size,
+        fileType: fileToUpload.type,
+        courseId,
+        nodeId
+      });
+      
+      const formData = new FormData();
+      formData.append('file', fileToUpload, fileName); // 使用轉換後的文件名（如果是 HEIC 轉換，會是 .jpg）
+
+      console.log('FormData 已創建，準備發送請求...');
+      const uploadUrl = `/api/courses/${courseId}/nodes/${nodeId}/upload`;
+      console.log('上傳 URL:', uploadUrl);
+
+      let response: Response;
+      try {
+        // 創建 AbortController 用於超時控制
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          console.warn('上傳超時，取消請求');
+          controller.abort();
+        }, 60000); // 60秒超時
+        
+        console.log('開始 fetch 請求...');
+        try {
+          response = await fetch(uploadUrl, {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          console.log('Fetch 請求完成，狀態:', response.status, response.statusText);
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId);
+          console.error('Fetch 請求失敗:', fetchError);
+          console.error('Fetch 錯誤詳情:', {
+            name: fetchError?.name,
+            message: fetchError?.message,
+            stack: fetchError?.stack,
+            isTrusted: fetchError?.isTrusted
+          });
+          
+          // 檢查是否是 abort 錯誤
+          if (fetchError.name === 'AbortError' || controller.signal.aborted) {
+            throw new Error('上傳超時，請稍後再試或選擇較小的文件');
+          }
+          
+          // 檢查是否是 DOM 事件對象
+          if (fetchError && typeof fetchError === 'object' && fetchError.isTrusted) {
+            throw new Error('網絡請求被中斷，請檢查網絡連接後重試');
+          }
+          
+          // 其他網絡錯誤
+          throw new Error(`網絡錯誤：${fetchError?.message || '無法連接到服務器，請檢查網絡連接'}`);
+        }
+      } catch (fetchError: any) {
+        // 處理網絡錯誤（如連接失敗、超時等）
+        console.error('外層 Fetch error:', fetchError);
+        
+        // 如果是已經包裝的 Error，直接拋出
+        if (fetchError instanceof Error) {
+          throw fetchError;
+        }
+        
+        // 如果是 DOM 事件對象，轉換為 Error
+        if (fetchError && typeof fetchError === 'object' && fetchError.isTrusted) {
+          throw new Error('網絡請求被中斷，請檢查網絡連接後重試');
+        }
+        
+        throw new Error(`網絡錯誤：${fetchError?.message || '無法連接到服務器，請檢查網絡連接'}`);
+      }
+
+      if (!response.ok) {
+        let errorData: any;
+        try {
+          errorData = await response.json();
+        } catch (parseError) {
+          errorData = { error: `Upload failed: ${response.status} ${response.statusText}` };
+        }
+        
+        console.error('Upload API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData
+        });
+        
+        const errorMessage = errorData.details 
+          ? `${errorData.error}: ${errorData.details}`
+          : errorData.error || `上傳失敗 (${response.status})`;
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      setUrl(data.url);
+      // 自動使用文件名作為 alt（如果沒有設置）
+      if (!alt && file.name) {
+        setAlt(file.name.replace(/\.[^/.]+$/, '')); // 移除副檔名
+      }
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+        error: error,
+        type: typeof error,
+        isError: error instanceof Error,
+        isEvent: error?.isTrusted !== undefined
+      });
+      
+      // 提取錯誤訊息（排除 DOM 事件對象）
+      let errorMessage = '上傳失敗，請稍後再試';
+      
+      // 檢查錯誤對象的實際內容
+      const errorKeys = error && typeof error === 'object' ? Object.keys(error) : [];
+      console.log('錯誤對象的鍵:', errorKeys);
+      
+      // 嘗試序列化錯誤對象（排除不可序列化的屬性）
+      try {
+        const errorString = JSON.stringify(error, (key, value) => {
+          // 排除函數和不可序列化的值
+          if (typeof value === 'function') return '[Function]';
+          if (value instanceof Error) return { message: value.message, stack: value.stack };
+          return value;
+        }, 2);
+        console.log('錯誤對象的完整內容:', errorString);
+      } catch (e) {
+        console.log('無法序列化錯誤對象:', e);
+      }
+      
+      // 如果是 DOM 事件對象（有 isTrusted 屬性），但可能是其他類型的錯誤
+      if (error && typeof error === 'object' && error.isTrusted !== undefined) {
+        console.warn('檢測到 isTrusted 屬性');
+        
+        // 檢查是否是網絡錯誤（通常會有特定的屬性）
+        if (errorKeys.length === 1 && errorKeys[0] === 'isTrusted') {
+          // 只有 isTrusted 屬性，可能是真正的 DOM 事件
+          errorMessage = '網絡錯誤或服務器無響應，請檢查網絡連接後重試';
+        } else {
+          // 有其他屬性，嘗試提取錯誤訊息
+          const extractedMessage = (error as any).message || 
+                                  (error as any).error || 
+                                  (error as any).details ||
+                                  (error as any).originalError ||
+                                  (error as any).reason;
+          
+          if (extractedMessage && typeof extractedMessage === 'string' && extractedMessage !== '[object Object]') {
+            errorMessage = extractedMessage;
+          } else {
+            // 嘗試從所有屬性中提取
+            for (const key of errorKeys) {
+              if (key !== 'isTrusted' && typeof (error as any)[key] === 'string') {
+                const value = (error as any)[key];
+                if (value && value !== '[object Object]' && !value.includes('isTrusted')) {
+                  errorMessage = value;
+                  break;
+                }
+              }
+            }
+            
+            if (errorMessage === '上傳失敗，請稍後再試') {
+              errorMessage = '上傳過程中發生未知錯誤，請查看控制台獲取詳細信息';
+            }
+          }
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message || '上傳失敗，請稍後再試';
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object') {
+        // 優先從常見的錯誤屬性中提取
+        errorMessage = error.message || 
+                      error.error || 
+                      error.details || 
+                      error.originalError ||
+                      (error.toString && error.toString() !== '[object Object]' ? error.toString() : null) ||
+                      '上傳失敗，請稍後再試';
+        
+        // 如果還是無效的訊息，使用默認值
+        if (!errorMessage || errorMessage === '[object Object]' || (errorMessage.includes('isTrusted') && !errorMessage.includes('網絡'))) {
+          errorMessage = '上傳失敗，請稍後再試';
+        }
+      }
+      
+      console.log('提取的錯誤訊息:', errorMessage);
+      
+      // 根據錯誤類型顯示不同的提示
+      if (errorMessage.includes('HEIC') || errorMessage.includes('轉換')) {
+        alert(`HEIC 轉換失敗：${errorMessage}\n\n請嘗試使用其他格式（如 JPEG 或 PNG）。`);
+      } else if (errorMessage.includes('compression') || errorMessage.includes('壓縮')) {
+        alert('圖片壓縮失敗，請稍後再試');
+      } else if (errorMessage.includes('File too large') || errorMessage.includes('檔案太大')) {
+        alert('檔案太大，請選擇較小的檔案');
+      } else if (errorMessage.includes('Invalid file type') || errorMessage.includes('不支援的檔案類型')) {
+        alert('不支援的檔案類型，請選擇圖片或 PDF 檔案');
+      } else if (errorMessage !== '上傳失敗，請稍後再試') {
+        alert(`上傳失敗：${errorMessage}`);
+      } else {
+        alert('上傳失敗，請稍後再試。如果問題持續，請檢查控制台以獲取更多信息。');
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = () => {
     if (url.trim()) {
       onSubmit(url.trim(), alt.trim() || undefined, caption.trim() || undefined);
+      // 提交後重置狀態
+      handleClose();
     }
   };
 
@@ -595,23 +996,144 @@ function MarkdownImageDialog({
         <h3 className="text-white font-bold mb-4 flex items-center gap-2">
           <ImageIcon size={20} /> 插入圖片
         </h3>
+        
+        {/* 模式切換 */}
+        <div className="flex gap-2 mb-4 bg-slate-800 rounded-lg p-1">
+          <button
+            onClick={() => setUploadMode('upload')}
+            className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              uploadMode === 'upload'
+                ? 'bg-emerald-600 text-white'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            上傳圖片
+          </button>
+          <button
+            onClick={() => setUploadMode('url')}
+            className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              uploadMode === 'url'
+                ? 'bg-emerald-600 text-white'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            使用 URL
+          </button>
+        </div>
+
         <div className="space-y-3">
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">圖片 URL *</label>
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && url.trim()) {
-                  handleSubmit();
-                }
-              }}
-              placeholder="https://example.com/image.jpg"
-              className="w-full bg-slate-950 text-slate-200 px-3 py-2 rounded border border-slate-700 focus:outline-none focus:border-emerald-500"
-              autoFocus
-            />
-          </div>
+          {uploadMode === 'upload' ? (
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">選擇圖片 *</label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif,application/pdf,.pdf"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="w-full px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-slate-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> 上傳中...
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon size={16} /> 選擇檔案
+                  </>
+                )}
+              </button>
+              {url && (
+                <div className="mt-3">
+                  <div className="mb-2 text-xs text-emerald-500 flex items-center gap-1">
+                    <CheckCircle2 size={12} /> 已上傳
+                  </div>
+                  {/* 文件預覽 */}
+                  <div className="relative bg-slate-800 rounded-lg overflow-hidden border border-slate-700">
+                    {(() => {
+                      const lowerUrl = url.toLowerCase();
+                      const isPdf = lowerUrl.includes('.pdf');
+                      const isHeic = lowerUrl.includes('.heic') || lowerUrl.includes('.heif');
+                      
+                      // PDF 預覽
+                      if (isPdf) {
+                        return (
+                          <iframe
+                            src={url}
+                            title="PDF 預覽"
+                            className="w-full h-64 border-none"
+                            style={{ minHeight: '256px' }}
+                          />
+                        );
+                      }
+                      
+                      // HEIC 預覽（瀏覽器不支援，顯示下載連結）
+                      if (isHeic) {
+                        return (
+                          <div className="p-6 text-center">
+                            <ImageIcon className="mx-auto text-slate-500 mb-2" size={32} />
+                            <p className="text-slate-400 text-sm mb-2">HEIC 格式</p>
+                            <p className="text-slate-500 text-xs mb-3">瀏覽器無法預覽，請下載查看</p>
+                            <a
+                              href={url}
+                              download
+                              className="inline-block px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-sm font-medium transition-colors"
+                            >
+                              下載檔案
+                            </a>
+                          </div>
+                        );
+                      }
+                      
+                      // 一般圖片預覽
+                      return (
+                        <img
+                          src={url}
+                          alt={alt || '上傳的圖片'}
+                          className="w-full h-auto max-h-64 object-contain"
+                          onError={(e) => {
+                            // 如果圖片載入失敗，顯示錯誤訊息
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.innerHTML = `
+                                <div class="p-4 text-center">
+                                  <p class="text-red-400 text-sm mb-1">無法預覽圖片</p>
+                                  <p class="text-slate-500 text-xs break-all">${url}</p>
+                                </div>
+                              `;
+                            }
+                          }}
+                        />
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">圖片 URL *</label>
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && url.trim()) {
+                    handleSubmit();
+                  }
+                }}
+                placeholder="https://example.com/image.jpg"
+                className="w-full bg-slate-950 text-slate-200 px-3 py-2 rounded border border-slate-700 focus:outline-none focus:border-emerald-500"
+                autoFocus
+              />
+            </div>
+          )}
           <div>
             <label className="block text-xs text-slate-400 mb-1">替代文字 (Alt) - 選填</label>
             <input
