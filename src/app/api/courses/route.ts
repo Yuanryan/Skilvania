@@ -14,7 +14,6 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const search = searchParams.get('search');
 
-    const session = await auth();
     const supabase = createAdminClient();
 
     // 瀏覽模式：獲取已發布的公開課程
@@ -122,6 +121,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ courses: formattedCourses });
     }
 
+    // 只有創建者模式才需要驗證
+    const session = await auth();
     // 創建者模式：獲取當前登錄創建者的所有課程（需要認證）
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

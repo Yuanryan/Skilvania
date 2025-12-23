@@ -354,7 +354,7 @@ function MessagesPageContent() {
               </h2>
             </div>
 
-            <div className="overflow-y-auto h-[calc(100%-73px)]">
+            <div className="overflow-hidden h-[calc(100%-73px)]">
               {isLoadingConversations ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
@@ -384,12 +384,12 @@ function MessagesPageContent() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center space-x-2 min-w-0">
                               <span className="font-semibold text-white truncate">
                                 {conv.name}
                               </span>
                               {conv.type === 'group' && (
-                                <span className={`px-1.5 py-0.5 text-xs rounded ${
+                                <span className={`flex-shrink-0 px-1.5 py-0.5 text-xs rounded ${
                                   conv.groupType === 'public' 
                                     ? 'bg-blue-900/30 text-blue-400'
                                     : 'bg-emerald-900/30 text-emerald-400'
@@ -399,7 +399,7 @@ function MessagesPageContent() {
                               )}
                             </div>
                             {conv.unreadCount > 0 && (
-                              <span className="bg-emerald-500 text-white text-xs rounded-full px-2 py-0.5 ml-2">
+                              <span className="bg-emerald-500 text-white text-xs rounded-full px-2 py-0.5 ml-2 flex-shrink-0">
                                 {conv.unreadCount}
                               </span>
                             )}
@@ -480,7 +480,7 @@ function MessagesPageContent() {
                 {/* Messages */}
                 <div
                   ref={chatContainerRef}
-                  className="flex-1 overflow-y-auto p-4 space-y-4"
+                  className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar"
                 >
                   {isLoadingChat ? (
                     <div className="flex items-center justify-center h-full">
@@ -573,8 +573,8 @@ function MessagesPageContent() {
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
                         {groupInfo.name.charAt(0).toUpperCase()}
                       </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-white">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-white truncate">
                           {groupInfo.name}
                         </h3>
                         <p className="text-xs text-slate-400">
@@ -616,7 +616,7 @@ function MessagesPageContent() {
                 {/* Group Messages */}
                 <div
                   ref={chatContainerRef}
-                  className="flex-1 overflow-y-auto p-4 space-y-4"
+                  className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar"
                 >
                   {isLoadingChat ? (
                     <div className="flex items-center justify-center h-full">
@@ -711,7 +711,7 @@ function MessagesPageContent() {
                         </button>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto mb-4">
+                      <div className="flex-1 overflow-y-auto mb-4 custom-scrollbar">
                         {isLoadingBuddies ? (
                           <div className="flex items-center justify-center py-8">
                             <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
