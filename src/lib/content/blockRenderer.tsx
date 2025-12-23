@@ -5,11 +5,14 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import rehypeHighlight from 'rehype-highlight';
+import rehypeKatex from 'rehype-katex';
 import { ContentBlock } from '@/types/content';
 import ImageBlock from '@/components/content/ImageBlock';
 import VideoBlock from '@/components/content/VideoBlock';
 import 'highlight.js/styles/github-dark.css';
+import 'katex/dist/katex.min.css'; // 引入 KaTeX 樣式
 
 /**
  * 檢測是否為影片 URL
@@ -62,8 +65,8 @@ function BlockComponent({ block }: { block: ContentBlock }) {
   return (
     <div className="prose prose-invert prose-emerald max-w-none markdown-content">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeHighlight, rehypeKatex]}
         components={{
           // 自定義段落渲染，避免 p 標籤內部嵌套 div
           p: ({ node, children, ...props }) => {
