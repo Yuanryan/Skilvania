@@ -83,7 +83,7 @@ interface StudyGroup {
 }
 
 export default function CommunityPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'buddies' | 'groups' | 'requests'>('buddies');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -115,18 +115,33 @@ export default function CommunityPage() {
   const [processingRequest, setProcessingRequest] = useState<number | null>(null);
 
   useEffect(() => {
+    if (status === 'loading') return;
+
+    if (status !== 'authenticated') {
+      setIsLoadingProfile(false);
+      setIsLoadingConnections(false);
+      setIsLoadingMatches(false);
+      setIsLoadingGroups(false);
+      setError('請先登入以使用社群功能');
+      return;
+    }
+
     fetchProfile();
     fetchConnections();
     fetchMatches();
-  }, []);
+  }, [status]);
 
   useEffect(() => {
+    if (status !== 'authenticated') return;
+
     if (activeTab === 'groups') {
       fetchGroups();
     }
-  }, [activeTab]);
+  }, [activeTab, status]);
 
   const fetchProfile = async () => {
+    if (status !== 'authenticated') return;
+
     try {
       setIsLoadingProfile(true);
       setError(null);
@@ -147,6 +162,8 @@ export default function CommunityPage() {
   };
 
   const fetchConnections = async () => {
+    if (status !== 'authenticated') return;
+
     try {
       setIsLoadingConnections(true);
       setError(null);
@@ -186,6 +203,8 @@ export default function CommunityPage() {
   };
 
   const fetchMatches = async () => {
+    if (status !== 'authenticated') return;
+
     try {
       setIsLoadingMatches(true);
       const response = await fetch('/api/community/match');
@@ -402,6 +421,8 @@ export default function CommunityPage() {
   };
 
   const fetchGroups = async () => {
+    if (status !== 'authenticated') return;
+
     try {
       setIsLoadingGroups(true);
       setError(null);
@@ -994,7 +1015,7 @@ export default function CommunityPage() {
                 </p>
               </div>
             ) : (
-                  <div className="max-h-[calc(100vh-400px)] overflow-y-auto pr-2">
+                  <div className="max-h-[calc(100vh-400px)] overflow-y-auto pr-2 custom-scrollbar">
                     {recommendedBuddies.map((match, index) => 
                       renderRecommendedBuddy(match, index === recommendedBuddies.length - 1)
                     )}
@@ -1032,7 +1053,7 @@ export default function CommunityPage() {
                         </p>
                       </div>
                     ) : (
-                      <div className="space-y-3 max-h-[calc(100vh-400px)] overflow-y-auto pr-2">
+                      <div className="space-y-3 max-h-[calc(100vh-400px)] overflow-y-auto pr-2 custom-scrollbar">
                         {publicGroups.map((group) => (
                           <div
                             key={group.groupId}
@@ -1135,7 +1156,7 @@ export default function CommunityPage() {
                         </button>
                       </div>
                     ) : (
-                      <div className="space-y-3 max-h-[calc(100vh-400px)] overflow-y-auto pr-2">
+                      <div className="space-y-3 max-h-[calc(100vh-400px)] overflow-y-auto pr-2 custom-scrollbar">
                         {privateGroups.map((group) => (
                           <div
                             key={group.groupId}
