@@ -1,7 +1,16 @@
 import { Navbar } from '@/components/ui/Navbar';
 import { User, MapPin, Calendar, Trophy, Flame, GitBranch, Share2, AlertCircle } from 'lucide-react';
 import { notFound } from 'next/navigation';
-import { headers } from 'next/headers';
+import { createAdminClient } from '@/lib/supabase/admin';
+import Link from 'next/link';
+
+interface CourseData {
+  id: number;
+  title: string;
+  progress: number;
+  totalNodes: number;
+  completedNodes: number;
+}
 
 interface UserData {
   userID: number;
@@ -17,39 +26,187 @@ interface UserData {
     nodesUnlocked: number;
     streak: number;
   };
+  courses: CourseData[];
 }
 
 async function fetchUserData(username: string): Promise<{ user: UserData | null; error: string | null }> {
   try {
-    const headersList = await headers();
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    
-    const response = await fetch(`${baseUrl}/api/profile/${username}`, {
-      headers: {
-        cookie: headersList.get('cookie') || '',
-      },
-      cache: 'no-store',
-    });
+    const supabase = createAdminClient();
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        return { user: null, error: null };
+    // 首先嘗試精確匹配（大小寫敏感）
+    let { data: user, error } = await supabase
+      .from('USER')
+      .select('*')
+      .eq('Username', username)
+      .single();
+
+    // 如果找不到，嘗試大小寫不敏感的查詢
+    if (error || !user) {
+      const { data: users, error: searchError } = await supabase
+        .from('USER')
+        .select('*')
+        .ilike('Username', username);
+
+      if (searchError) {
+        console.error('Error searching user:', searchError);
+        return { user: null, error: 'User not found' };
       }
-      const errorData = await response.json().catch(() => ({}));
-      return { user: null, error: errorData.error || `Failed to fetch user (${response.status})` };
+
+      if (!users || users.length === 0) {
+        return { user: null, error: null }; // 404
+      }
+
+      user = users[0];
     }
 
-    const data = await response.json();
-    
-    // 檢查是否有錯誤訊息（即使有錯誤也可能返回部分數據）
-    if (data.error) {
-      return { user: data.user || null, error: data.error };
+    if (!user) {
+      return { user: null, error: null };
     }
+
+    // 分別查詢用戶角色（避免嵌套查詢問題）
+    let roles: Array<{ roleID: number; roleName: string }> = [];
+    try {
+      const { data: userRoles, error: rolesError } = await supabase
+        .from('userrole')
+        .select('RoleID')
+        .eq('UserID', user.UserID);
+
+      if (!rolesError && userRoles && userRoles.length > 0) {
+        const roleIds = userRoles.map(ur => ur.RoleID);
+        
+        const { data: rolesData, error: rolesDataError } = await supabase
+          .from('roles')
+          .select('RoleID, RoleName')
+          .in('RoleID', roleIds);
+
+        if (!rolesDataError && rolesData) {
+          roles = rolesData.map((r: any) => ({
+            roleID: r.RoleID,
+            roleName: r.RoleName
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching user roles:', err);
+      // Continue without roles if there's an error
+    }
+
+    // 計算用戶統計數據和獲取課程
+    let nodesUnlocked = 0;
+    let coursesCompleted = 0;
+    const userCourses: CourseData[] = [];
     
-    return { user: data.user || null, error: null };
+    try {
+      // 獲取用戶進度記錄
+      const { data: progressData, error: progressError } = await supabase
+        .from('userprogress')
+        .select('NodeID, CompletedAt, Status')
+        .eq('UserID', user.UserID)
+        .in('Status', ['unlocked', 'completed']);
+      
+      if (progressError) {
+        console.error('Error fetching progress:', progressError);
+      }
+
+      if (progressData && progressData.length > 0) {
+        nodesUnlocked = progressData.length;
+
+        // 獲取所有相關節點的 CourseID
+        const nodeIds = progressData.map(p => p.NodeID);
+        const { data: nodes, error: nodesError } = await supabase
+          .from('node')
+          .select('NodeID, CourseID')
+          .in('NodeID', nodeIds);
+
+        if (!nodesError && nodes) {
+          // 建立 NodeID 到 CourseID 的映射
+          const nodeToCourseMap = new Map<number, number>();
+          nodes.forEach(node => {
+            nodeToCourseMap.set(node.NodeID, node.CourseID);
+          });
+
+          // 建立 CourseID 到進度記錄的映射
+          const courseProgressMap = new Map<number, any[]>();
+          progressData.forEach(progress => {
+            const courseId = nodeToCourseMap.get(progress.NodeID);
+            if (courseId) {
+              if (!courseProgressMap.has(courseId)) {
+                courseProgressMap.set(courseId, []);
+              }
+              courseProgressMap.get(courseId)!.push(progress);
+            }
+          });
+
+          // 獲取每個課程的詳細資訊和進度
+          for (const [courseId, courseProgress] of courseProgressMap.entries()) {
+            const { data: course, error: courseError } = await supabase
+              .from('course')
+              .select('CourseID, Title')
+              .eq('CourseID', courseId)
+              .single();
+
+            if (courseError || !course) continue;
+
+            // 獲取課程的所有節點
+            const { data: allNodes } = await supabase
+              .from('node')
+              .select('NodeID')
+              .eq('CourseID', courseId);
+
+            const totalNodes = allNodes?.length || 0;
+            const completedNodes = courseProgress.filter(p => p.Status === 'completed').length;
+
+            const progress = totalNodes > 0 
+              ? Math.round((completedNodes / totalNodes) * 100)
+              : 0;
+
+            // 如果進度為 100%，則計入完成的課程
+            if (progress === 100) {
+              coursesCompleted++;
+            }
+
+            userCourses.push({
+              id: course.CourseID,
+              title: course.Title,
+              progress,
+              totalNodes,
+              completedNodes
+            });
+          }
+
+          // 按進度排序（進度高的在前）
+          userCourses.sort((a, b) => b.progress - a.progress);
+        }
+      }
+    } catch (err) {
+      console.error('Error calculating user stats:', err);
+    }
+
+    return {
+      user: {
+        userID: user.UserID,
+        username: user.Username,
+        email: user.Email,
+        level: user.Level || 1,
+        xp: user.XP || 0,
+        createdAt: user.CreatedAt,
+        updatedAt: user.UpdatedAt,
+        roles,
+        stats: {
+          coursesCompleted,
+          nodesUnlocked,
+          streak: 0
+        },
+        courses: userCourses
+      },
+      error: null
+    };
   } catch (error) {
     console.error('Error fetching user:', error);
-    return { user: null, error: error instanceof Error ? error.message : 'Failed to fetch user' };
+    return { 
+      user: null, 
+      error: error instanceof Error ? error.message : 'Failed to load user data' 
+    };
   }
 }
 
@@ -83,9 +240,7 @@ export default async function UserProfilePage({ params }: { params: Promise<{ us
     ? new Date(userData.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) 
     : 'Recently';
   const stats = userData.stats;
-  const activeTrees: any[] = [
-     // Placeholder for now as we don't have user_courses table yet
-  ];
+  const activeTrees = userData.courses || [];
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col">
@@ -192,20 +347,67 @@ export default async function UserProfilePage({ params }: { params: Promise<{ us
                 
                 {activeTrees.length > 0 ? (
                     <div className="grid gap-4">
-                        {activeTrees.map((tree: any) => (
-                            <div key={tree.id} className="bg-slate-900 border border-white/5 p-6 rounded-2xl flex items-center gap-6 hover:border-white/10 transition-colors">
-                                <div className={`w-16 h-16 rounded-xl bg-${tree.color}-900/20 border border-${tree.color}-500/20 flex items-center justify-center`}>
-                                    <GitBranch className={`text-${tree.color}-500`} size={32} />
-                                </div>
-                                <div className="flex-1">
-                                    <h4 className="text-lg font-bold text-white mb-2">{tree.title}</h4>
-                                    <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                                        <div className={`bg-${tree.color}-500 h-full`} style={{ width: `${tree.progress}%` }}></div>
+                        {activeTrees.map((tree: CourseData) => {
+                            // 根據進度選擇顏色類別
+                            const getColorClasses = (progress: number) => {
+                                if (progress === 100) {
+                                    return {
+                                        bg: 'bg-emerald-900/20',
+                                        border: 'border-emerald-500/20',
+                                        text: 'text-emerald-500',
+                                        progressBg: 'bg-emerald-500'
+                                    };
+                                }
+                                if (progress >= 50) {
+                                    return {
+                                        bg: 'bg-blue-900/20',
+                                        border: 'border-blue-500/20',
+                                        text: 'text-blue-500',
+                                        progressBg: 'bg-blue-500'
+                                    };
+                                }
+                                if (progress >= 25) {
+                                    return {
+                                        bg: 'bg-purple-900/20',
+                                        border: 'border-purple-500/20',
+                                        text: 'text-purple-500',
+                                        progressBg: 'bg-purple-500'
+                                    };
+                                }
+                                return {
+                                    bg: 'bg-slate-800/20',
+                                    border: 'border-slate-500/20',
+                                    text: 'text-slate-400',
+                                    progressBg: 'bg-slate-500'
+                                };
+                            };
+                            const colors = getColorClasses(tree.progress);
+                            
+                            return (
+                                <Link
+                                    key={tree.id}
+                                    href={`/courses/${tree.id}`}
+                                    className="bg-slate-900 border border-white/5 p-6 rounded-2xl flex items-center gap-6 hover:border-white/10 transition-colors cursor-pointer"
+                                >
+                                    <div className={`w-16 h-16 rounded-xl ${colors.bg} border ${colors.border} flex items-center justify-center flex-shrink-0`}>
+                                        <GitBranch className={colors.text} size={32} />
                                     </div>
-                                    <div className="mt-2 text-xs text-slate-400 text-right font-bold">{tree.progress}% Grown</div>
-                                </div>
-                            </div>
-                        ))}
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className="text-lg font-bold text-white mb-2 truncate">{tree.title}</h4>
+                                        <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                            <div 
+                                                className={`${colors.progressBg} h-full transition-all duration-300`} 
+                                                style={{ width: `${tree.progress}%` }}
+                                            ></div>
+                                        </div>
+                                        <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+                                            <span>{tree.completedNodes} / {tree.totalNodes} nodes</span>
+                                            <span className="font-bold">{tree.progress}% Complete</span>
+                                        </div>
+                                    </div>
+                                </Link>
+                            );
+                        })}
                     </div>
                 ) : (
                     <div className="bg-slate-900 border border-dashed border-slate-800 rounded-2xl p-12 text-center text-slate-500">
