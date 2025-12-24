@@ -13,13 +13,8 @@ interface OrganicNodeProps {
   isCreatorMode: boolean;
   onClick: (node: Node) => void;
   onMouseDown?: (e: React.MouseEvent, node: Node) => void;
+  delay?: number;
 }
-
-const getDelay = (y: number) => {
-  const startY = 1500;
-  const pxPerSecond = 250;
-  return Math.max(0, (startY - y) / pxPerSecond); 
-};
 
 export const OrganicNode: React.FC<OrganicNodeProps> = ({ 
   node, 
@@ -27,11 +22,15 @@ export const OrganicNode: React.FC<OrganicNodeProps> = ({
   onClick, 
   isSelected, 
   isCreatorMode, 
-  onMouseDown 
+  onMouseDown,
+  delay = 0
 }) => {
   // Dynamically resolve icon, fallback to Code
   const Icon = (Icons as any)[node.iconName || 'Code'] || Icons.Code;
-  const animDelay = getDelay(node.y) + 0.5;
+  
+  // Use provided delay + small offset for bloom effect
+  // If in creator mode, delay is 0
+  const animDelay = !isCreatorMode ? delay + 0.5 : 0;
 
   const statusStyles = {
     locked: "bg-slate-900/80 border-slate-700 text-slate-600 scale-90 grayscale",

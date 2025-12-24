@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import { motion } from 'framer-motion';
 import { Node, Edge } from '@/types';
 
 interface TreeBranchProps {
@@ -8,30 +9,36 @@ interface TreeBranchProps {
   end: Node;
   status: 'locked' | 'unlocked' | 'completed';
   isCreatorMode: boolean;
+  delay?: number;
 }
 
-const getDelay = (y: number) => {
-  const startY = 1500;
-  const pxPerSecond = 250;
-  return Math.max(0, (startY - y) / pxPerSecond); 
-};
-
-export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCreatorMode }) => {
+export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCreatorMode, delay: propDelay }) => {
   // Cubic Bezier Logic for "Organic Growth"
   const controlPointY = start.y - (start.y - end.y) * 0.5;
   
   const path = `
     M ${start.x} ${start.y} 
     C ${start.x} ${controlPointY}, 
-      ${end.x} ${controlPointY}, 
-      ${end.x} ${end.y}
+    ${end.x} ${controlPointY}, 
+    ${end.x} ${end.y}
   `;
 
   const normalizeY = Math.max(0, Math.min(1, start.y / 4000)); 
   const thickness = 4 + (normalizeY * 10); 
 
-  const delay = getDelay(start.y);
-  const length = 3000; 
+  // Use provided delay or fallback to Y-position based delay (legacy support)
+  const getDelay = (y: number) => {
+    const startY = 1500;
+    const pxPerSecond = 250;
+    return Math.max(0, (startY - y) / pxPerSecond); 
+  };
+  
+  const delay = propDelay !== undefined ? propDelay : getDelay(start.y);
+  
+  // Estimate path length for better animation timing
+  const dist = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
+  const length = Math.max(dist * 1.5, 100); // Minimum length to avoid glitch
+  const duration = Math.max(1, length / 500); // Speed: 500px/s, min 1s
 
   // In Creator Mode, we want solid lines that update instantly, no fancy growth animation
   if (isCreatorMode) {
@@ -68,7 +75,7 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
   return (
     <g>
       {/* The "Bark" */}
-      <path 
+      <motion.path 
         d={path} 
         stroke="#3f3c35" 
         strokeWidth={thickness} 
@@ -76,29 +83,31 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
         fill="none" 
         filter="url(#roughness-global)" 
         className="opacity-90"
-        style={{
-          strokeDasharray: length,
-          strokeDashoffset: length,
-          animation: `growBranch 10s ease-out forwards`,
-          animationDelay: `${delay}s`,
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ 
+          duration: duration, 
+          delay: delay,
+          ease: "easeOut" 
         }}
       />
       
       {/* The "Energy" */}
       {(status === 'completed' || status === 'unlocked') && (
-        <path 
+        <motion.path 
           d={path} 
           stroke={status === 'completed' ? "#10b981" : "#059669"} 
           strokeWidth={thickness / 2.5} 
           strokeLinecap="round" 
           fill="none" 
-          style={{
-             strokeDasharray: length,
-             strokeDashoffset: length,
-             animation: `growBranch 10s ease-out forwards`,
-             animationDelay: `${delay}s`
-          }}
           className="opacity-80 mix-blend-screen"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ 
+            duration: duration, 
+            delay: delay,
+            ease: "easeOut" 
+          }}
         />
       )}
 
@@ -113,7 +122,7 @@ export const TreeBranch: React.FC<TreeBranchProps> = ({ start, end, status, isCr
           style={{
              strokeDasharray: `100 1400`, 
              animation: `growBranch 3.5s linear infinite, fade-in-pulse 0.1s forwards`,
-             animationDelay: `calc(${delay}s)`, // Wait for growth animation (10s) to finish
+             animationDelay: `calc(${delay}s + ${duration}s)`, // Wait for growth animation to finish
              opacity: 0, // Initially hidden
           }}
           className="blur-[1px] mix-blend-plus-lighter"

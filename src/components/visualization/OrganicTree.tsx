@@ -213,6 +213,57 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
     }
   }, [externalSelectedNodeId]);
 
+  // Calculate node depths for animation staggering
+  const nodeDelays = React.useMemo(() => {
+    const delays: Record<string, number> = {};
+    
+    // Build adjacency list for faster lookup
+    const adjacency: Record<string, string[]> = {};
+    const inDegree: Record<string, number> = {};
+    
+    nodes.forEach(node => {
+      adjacency[node.id] = [];
+      inDegree[node.id] = 0;
+    });
+    
+    edges.forEach(edge => {
+      if (adjacency[edge.from]) {
+        adjacency[edge.from].push(edge.to);
+      }
+      if (inDegree[edge.to] !== undefined) {
+        inDegree[edge.to]++;
+      }
+    });
+
+    // Find roots (nodes with 0 in-degree)
+    const queue: { id: string; depth: number }[] = [];
+    nodes.forEach(node => {
+      if (inDegree[node.id] === 0) {
+        queue.push({ id: node.id, depth: 0 });
+      }
+    });
+
+    // BFS to assign depths
+    const visited = new Set<string>();
+    queue.forEach(item => visited.add(item.id));
+    
+    while (queue.length > 0) {
+      const { id, depth } = queue.shift()!;
+      // Delay is 0.8s per depth level
+      delays[id] = depth * 0.8;
+      
+      const neighbors = adjacency[id] || [];
+      neighbors.forEach(neighborId => {
+        if (!visited.has(neighborId)) {
+          visited.add(neighborId);
+          queue.push({ id: neighborId, depth: depth + 1 });
+        }
+      });
+    }
+    
+    return delays;
+  }, [nodes, edges]);
+
   return (
     <div 
       ref={containerRef}
@@ -318,6 +369,8 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
                   if (completedNodes.has(edge.from) && completedNodes.has(edge.to)) status = 'completed';
                   else if (completedNodes.has(edge.from)) status = 'unlocked';
 
+                  const delay = nodeDelays[edge.from] || 0;
+
                   return (
                     <TreeBranch 
                       key={edge.id} 
@@ -325,6 +378,7 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
                       end={endNode} 
                       status={status} 
                       isCreatorMode={isCreatorMode} 
+                      delay={delay}
                     />
                   );
                 })}
@@ -341,6 +395,7 @@ export const OrganicTree: React.FC<OrganicTreeProps> = ({
                     isCreatorMode={isCreatorMode}
                     onMouseDown={handleNodeMouseDown}
                     onClick={handleNodeClick}
+                    delay={nodeDelays[node.id] || 0}
                   />
                 ))}
               </div>
