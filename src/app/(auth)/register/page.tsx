@@ -49,14 +49,26 @@ export default function RegisterPage() {
       if (result?.error) {
         switch (result.error) {
           case "UserExists":
-            setError("User with this email already exists");
+            setError("這個 Email 已經註冊過了");
             break;
           case "UsernameTaken":
-            setError("Username is already taken");
+            setError("這個使用者名稱已被使用");
+            break;
+          case "UsernameRequired":
+            setError("請輸入使用者名稱");
+            break;
+          case "RegistrationFailed":
+            setError("註冊失敗（請稍後再試，或檢查資料庫/權限設定）");
+            break;
+          case "SupabaseNotConfigured":
+            setError("伺服器尚未完成 Supabase 設定（缺少 SUPABASE_SERVICE_ROLE_KEY）");
             break;
           case "InvalidCredentials":
           case "CredentialsSignin":
-            setError("Registration failed. Please check your details.");
+            setError("註冊失敗，請檢查輸入內容");
+            break;
+          case "Configuration":
+            setError("伺服器認證設定有誤（請檢查 .env.local 的 NEXTAUTH_* / SUPABASE_*）");
             break;
           default:
             setError(result.error);

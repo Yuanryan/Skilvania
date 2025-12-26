@@ -2,6 +2,7 @@ import NextAuth, { CredentialsSignin } from "next-auth"
 import Google from "next-auth/providers/google"
 import Credentials from "next-auth/providers/credentials"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient, hasAdminConfig } from "@/lib/supabase/admin"
 import bcrypt from "bcryptjs"
 import { logActivity } from "@/lib/mongodb/activity"
 
@@ -9,6 +10,9 @@ class InvalidCredentials extends CredentialsSignin { code = "InvalidCredentials"
 class UserExists extends CredentialsSignin { code = "UserExists" }
 class UsernameTaken extends CredentialsSignin { code = "UsernameTaken" }
 class GoogleSignInRequired extends CredentialsSignin { code = "GoogleSignInRequired" }
+class UsernameRequired extends CredentialsSignin { code = "UsernameRequired" }
+class RegistrationFailed extends CredentialsSignin { code = "RegistrationFailed" }
+class SupabaseNotConfigured extends CredentialsSignin { code = "SupabaseNotConfigured" }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
@@ -43,7 +47,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
-        const supabase = await createClient();
         const email = credentials.email as string;
         const password = credentials.password as string;
         const isSignUp = credentials.isSignUp === "true";
@@ -52,8 +55,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (isSignUp) {
           // Registration logic
           if (!username) {
-            throw new Error("Username is required for registration");
+            throw new UsernameRequired();
           }
+
+          // 註冊需要寫入 USER 表；若沒設定 service role，通常會被 RLS 擋下
+          if (!hasAdminConfig()) {
+            throw new SupabaseNotConfigured();
+          }
+
+          const supabase = createAdminClient();
 
           // Check if user already exists
           const { data: existingUser } = await supabase
@@ -92,7 +102,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
           if (error) {
             console.error("Error creating user:", error);
-            throw new Error("Failed to create user");
+            throw new RegistrationFailed();
           }
 
           // 自動記錄註冊活動
@@ -108,6 +118,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           };
         } else {
           // Login logic
+          // 登入只需讀取 USER；若有 admin config 則用 admin（避免 RLS 影響）
+          const supabase = hasAdminConfig() ? createAdminClient() : await createClient();
+
           const { data: user, error } = await supabase
             .from('USER')
             .select('UserID, Username, Email, Password')
@@ -157,7 +170,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async signIn({ user, account, profile }) {
       if (account?.provider === "google") {
         try {
-          const supabase = await createClient();
+          if (!hasAdminConfig()) {
+            console.error("Google sign-in blocked");
+            return "/auth/error?error=SupabaseNotConfigured";
+          }
+
+          const supabase = createAdminClient();
+
+          if (!user.email) {
+            console.error("Google sign-in failed: provider did not return an email");
+            return "/auth/error?error=EmailMissingFromProvider";
+          }
 
           // Check if user exists in our database
           const { data: existingUser } = await supabase
@@ -181,7 +204,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
             if (error) {
               console.error("Error creating user:", error);
-              return false;
+              return "/auth/error?error=DatabaseWriteFailed";
             }
 
             // Store user ID in the user object
@@ -194,10 +217,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             });
           } else {
             // Update last activity
-            await supabase
+            const { error: updateError } = await supabase
               .from('USER')
               .update({ UpdatedAt: new Date().toISOString() })
               .eq('UserID', existingUser.UserID);
+
+            if (updateError) {
+              console.error("Error updating user:", updateError);
+              return "/auth/error?error=DatabaseWriteFailed";
+            }
 
             user.id = existingUser.UserID.toString();
             
@@ -211,7 +239,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return true;
         } catch (error) {
           console.error("Sign in error:", error);
-          return false;
+          return "/auth/error?error=DatabaseWriteFailed";
         }
       }
       // For credentials provider, the authorize function already handled validation

@@ -12,21 +12,27 @@ function ErrorContent() {
   const getErrorMessage = (error: string | null) => {
     switch (error) {
       case "Configuration":
-        return "There is a problem with the server configuration.";
+        return "伺服器認證設定有問題（請檢查 .env.local / NextAuth / Supabase 設定）。";
       case "AccessDenied":
-        return "You do not have permission to sign in.";
+        return "你沒有權限登入（通常是後端拒絕寫入/讀取資料或權限設定問題）。";
       case "Verification":
-        return "The verification token has expired or has already been used.";
+        return "驗證 token 已過期或已被使用。";
       case "OAuthAccountNotLinked":
-        return "To confirm your identity, sign in with the same account you used originally.";
+        return "為確認身分，請使用你一開始註冊/登入時使用的同一個帳號。";
       case "OAuthSignin":
-        return "Error in constructing an authorization URL.";
+        return "建立 OAuth 授權網址時發生錯誤。";
       case "OAuthCallback":
-        return "Error in handling the response from an OAuth provider.";
+        return "處理 OAuth 回傳結果時發生錯誤。";
       case "CredentialsSignin":
-        return "Sign in failed. Check the details you provided.";
+        return "登入失敗，請檢查帳號或密碼。";
+      case "SupabaseNotConfigured":
+        return "Supabase 設定不完整：缺少 `SUPABASE_SERVICE_ROLE_KEY`（註冊/Google OAuth 需要用它寫入 USER 表）。";
+      case "DatabaseWriteFailed":
+        return "寫入使用者資料失敗（多半是 Supabase RLS/權限或資料表約束問題）。";
+      case "EmailMissingFromProvider":
+        return "Google 沒有回傳 email（請確認 Google OAuth scope/帳號類型與同意畫面設定）。";
       default:
-        return "An error occurred during authentication.";
+        return "認證過程發生錯誤。";
     }
   };
 
@@ -39,7 +45,7 @@ function ErrorContent() {
       </div>
       
       <h1 className="text-2xl font-bold text-white mb-2 text-center">
-        Authentication Error
+        認證錯誤
       </h1>
       <p className="text-slate-400 text-center mb-6">
         {getErrorMessage(error)}
